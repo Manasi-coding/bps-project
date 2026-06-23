@@ -70,7 +70,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='usb'>
-      <pose>-2.1877003887709074 -0.5624695330939542 0.024999902908918063 -6.7928581423537275e-18 -3.1774301462100764e-19 2.4767312181357039e-21</pose>
+      <pose>-0.59999999999999998 0.5 0.025000000000000001 0 0 0</pose>
       <link name='box_link'>
         <inertial>
           <inertia>
@@ -87,7 +87,7 @@
         <collision name='box_collision'>
           <geometry>
             <box>
-              <size>0.06 0.02 0.01</size>
+              <size>0.29999999999999999 0.10000000000000001 0.050000000000000003</size>
             </box>
           </geometry>
           <surface>
@@ -101,7 +101,7 @@
         <visual name='box_visual'>
           <geometry>
             <box>
-              <size>0.06 0.02 0.01</size>
+              <size>0.29999999999999999 0.10000000000000001 0.050000000000000003</size>
             </box>
           </geometry>
           <material>
@@ -117,7 +117,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='credit_card'>
-      <pose>-2.2827056370298244 -2.3846038677416774 0.0099999024442195949 -5.3747689488871478e-19 1.4810728004619324e-19 2.048191843029745e-21</pose>
+      <pose>0.59999999999999998 0 0.01 0 0 0</pose>
       <link name='box_link'>
         <inertial>
           <inertia>
@@ -134,7 +134,7 @@
         <collision name='box_collision'>
           <geometry>
             <box>
-              <size>0.085 0.054 0.002</size>
+              <size>0.40000000000000002 0.25 0.02</size>
             </box>
           </geometry>
           <surface>
@@ -148,7 +148,7 @@
         <visual name='box_visual'>
           <geometry>
             <box>
-              <size>0.085 0.054 0.002</size>
+              <size>0.40000000000000002 0.25 0.02</size>
             </box>
           </geometry>
           <material>
@@ -164,7 +164,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='ruler'>
-      <pose>-2.2071640999212296 -4.3262305579606499 0.0099998985711815015 -1.0788008024151996e-17 -6.2867329420083653e-19 2.3068833210259388e-22</pose>
+      <pose>0.59999999999999998 -0.5 0.01 0 0 0</pose>
       <link name='box_link'>
         <inertial>
           <inertia>
@@ -181,7 +181,7 @@
         <collision name='box_collision'>
           <geometry>
             <box>
-              <size>0.30 0.03 0.005</size>
+              <size>1 0.10000000000000001 0.02</size>
             </box>
           </geometry>
           <surface>
@@ -195,7 +195,7 @@
         <visual name='box_visual'>
           <geometry>
             <box>
-              <size>0.30 0.03 0.005</size>
+              <size>1 0.10000000000000001 0.02</size>
             </box>
           </geometry>
           <material>
@@ -211,7 +211,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='bottle'>
-      <pose>-4.9443664021853335 -0.96036808145364749 0.19999914198042404 -3.1810557044233686e-18 -7.4727763026783604e-19 2.0401756004635203e-20</pose>
+      <pose>0.59999999999999998 0.5 0.20000000000000001 0 0 0</pose>
       <link name='cylinder_link'>
         <inertial>
           <inertia>
@@ -228,8 +228,8 @@
         <collision name='cylinder_collision'>
           <geometry>
             <cylinder>
-              <radius>0.04</radius>
-              <length>0.20</length>
+              <radius>0.080000000000000002</radius>
+              <length>0.40000000000000002</length>
             </cylinder>
           </geometry>
           <surface>
@@ -243,8 +243,8 @@
         <visual name='cylinder_visual'>
           <geometry>
             <cylinder>
-              <radius>0.04</radius>
-              <length>0.20</length> 
+              <radius>0.080000000000000002</radius>
+              <length>0.40000000000000002</length>
             </cylinder>
           </geometry>
           <material>
@@ -260,7 +260,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='pen'>
-      <pose>-4.961837548956801 -2.2843624628155998 0.19999914203550381 3.6955799647325561e-19 5.2190988829368935e-19 1.8573982441481746e-20</pose>
+      <pose>-0.59999999999999998 -0.5 0.20000000000000001 0 0 0</pose>
       <link name='cylinder_link'>
         <inertial>
           <inertia>
@@ -277,8 +277,8 @@
         <collision name='cylinder_collision'>
           <geometry>
             <cylinder>
-              <radius>0.006</radius>
-              <length>0.15</length>
+              <radius>0.029999999999999999</radius>
+              <length>0.40000000000000002</length>
             </cylinder>
           </geometry>
           <surface>
@@ -292,8 +292,8 @@
         <visual name='cylinder_visual'>
           <geometry>
             <cylinder>
-              <radius>0.006</radius>
-              <length>0.15</length>
+              <radius>0.029999999999999999</radius>
+              <length>0.40000000000000002</length>
             </cylinder>
           </geometry>
           <material>
@@ -309,7 +309,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='marker'>
-      <pose>-4.90873086455899 -3.7613948764558351 0.19999914201948077 6.9427799638013643e-18 3.1958086255646628e-18 -1.3796635094257423e-20</pose>
+      <pose>-0.59999999999999998 0 0.20000000000000001 0 0 0</pose>
       <link name='cylinder_link'>
         <inertial>
           <inertia>
@@ -326,8 +326,8 @@
         <collision name='cylinder_collision'>
           <geometry>
             <cylinder>
-              <radius>0.01</radius>
-              <length>0.14</length>
+              <radius>0.050000000000000003</radius>
+              <length>0.40000000000000002</length>
             </cylinder>
           </geometry>
           <surface>
@@ -341,8 +341,8 @@
         <visual name='cylinder_visual'>
           <geometry>
             <cylinder>
-              <radius>0.01</radius>
-              <length>0.14</length>
+              <radius>0.050000000000000003</radius>
+              <length>0.40000000000000002</length>
             </cylinder>
           </geometry>
           <material>
@@ -358,7 +358,7 @@
       <self_collide>false</self_collide>
     </model>
     <model name='depth_camera'>
-      <pose>1.975566029548645 -2.3983142375946045 0.5 0 0 3.1399999999975172</pose>
+      <pose>0 -2 1.2 -1.2650923945362596e-16 0.50000000000000011 1.5699999999999998</pose>
       <link name='link'>
         <pose>0.050000000000000003 0.050000000000000003 0.050000000000000003 0 0 0</pose>
         <inertial>
@@ -399,7 +399,7 @@
           <topic>depth_camera</topic>
           <update_rate>10</update_rate>
           <enable_metrics>false</enable_metrics>
-          <camera>
+          <camera name='__default__'>
             <pose>0 0 0 0 0 0</pose>
             <horizontal_fov>1.05</horizontal_fov>
             <image>
@@ -446,7 +446,7 @@
           <topic>rgb_camera</topic>
           <update_rate>10</update_rate>
           <enable_metrics>false</enable_metrics>
-          <camera>
+          <camera name='__default__'>
             <pose>0 0 0 0 0 0</pose>
             <horizontal_fov>1.05</horizontal_fov>
             <image>
