@@ -73,28 +73,33 @@
       <static>true</static>
       <self_collide>false</self_collide>
     </model>
-    <model name='ground_plane'>
+    <model name="table">
       <static>true</static>
-      <link name='link'>
-        <collision name='collision'>
-          <geometry>
-            <plane>
-              <normal>0 0 1</normal>
-              <size>100 100</size>
-            </plane>
-          </geometry>
+      <pose>0 0 0.001 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>1.0 1.0 0.002</size></box></geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry><box><size>1.0 1.0 0.002</size></box></geometry>
         </collision>
-        <visual name='visual'>
-          <geometry>
-            <plane>
-              <normal>0 0 1</normal>
-              <size>100 100</size>
-            </plane>
-          </geometry>
+      </link>
+    </model>
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
           <material>
             <ambient>0.8 0.8 0.8 1</ambient>
             <diffuse>0.8 0.8 0.8 1</diffuse>
-            <specular>0.8 0.8 0.8 1</specular>
           </material>
         </visual>
         <pose>0 0 0 0 0 0</pose>
@@ -232,17 +237,28 @@
             <optical_frame_id></optical_frame_id>
           </camera>
         </sensor>
-        
-        <sensor name="instance_segmentation_camera" type="segmentation">
+          <sensor name="instance_segmentation_camera" type="segmentation">
           <topic>panoptic</topic>
+
           <camera>
-            <segmentation_type>semantic</segmentation_type>
+            <segmentation_type>instance</segmentation_type>
+
             <horizontal_fov>1.05</horizontal_fov>
-            <image><width>640</width><height>480</height></image>
-            <clip><near>0.1</near><far>2.0</far></clip>
+
+            <image>
+              <width>640</width>
+              <height>480</height>
+            </image>
+
+            <clip>
+              <near>0.1</near>
+              <far>2.0</far>
+            </clip>
           </camera>
+
           <always_on>1</always_on>
           <update_rate>10</update_rate>
+          <visualize>true</visualize>
         </sensor>
         <enable_wind>false</enable_wind>
       </link>

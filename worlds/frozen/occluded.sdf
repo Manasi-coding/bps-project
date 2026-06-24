@@ -12,6 +12,7 @@
       <render_engine>ogre2</render_engine>
     </plugin>
     <plugin name='gz::sim::systems::Contact' filename='gz-sim-contact-system'/>
+    <plugin name='gz::sim::systems::Label' filename='gz-sim-label-system'/>
     <gravity>0 0 -9.8000000000000007</gravity>
     <magnetic_field>5.5644999999999998e-06 2.2875799999999999e-05 -4.2388400000000002e-05</magnetic_field>
     <atmosphere type='adiabatic'/>
@@ -109,6 +110,11 @@
             <diffuse>1 0 0 1</diffuse>
             <specular>1 1 1 1</specular>
           </material>
+        
+          <plugin filename="gz-sim-label-system"
+                  name="gz::sim::systems::Label">
+            <label>1</label>
+          </plugin>
         </visual>
         <pose>0 0 0 0 0 0</pose>
         <enable_wind>false</enable_wind>
@@ -156,6 +162,11 @@
             <diffuse>0 0 1 1</diffuse>
             <specular>1 1 1 1</specular>
           </material>
+        
+          <plugin filename="gz-sim-label-system"
+                  name="gz::sim::systems::Label">
+            <label>6</label>
+          </plugin>
         </visual>
         <pose>0 0 0 0 0 0</pose>
         <enable_wind>false</enable_wind>
@@ -203,6 +214,11 @@
             <diffuse>0 1 0 1</diffuse>
             <specular>1 1 1 1</specular>
           </material>
+        
+          <plugin filename="gz-sim-label-system"
+                  name="gz::sim::systems::Label">
+            <label>4</label>
+          </plugin>
         </visual>
         <pose>0 0 0 0 0 0</pose>
         <enable_wind>false</enable_wind>
@@ -252,6 +268,11 @@
             <diffuse>1 1 0 1</diffuse>
             <specular>1 1 1 1</specular>
           </material>
+        
+          <plugin filename="gz-sim-label-system"
+                  name="gz::sim::systems::Label">
+            <label>2</label>
+          </plugin>
         </visual>
         <pose>0 0 0 0 0 0</pose>
         <enable_wind>false</enable_wind>
@@ -301,6 +322,11 @@
             <diffuse>1 0 1 1</diffuse>
             <specular>1 1 1 1</specular>
           </material>
+        
+          <plugin filename="gz-sim-label-system"
+                  name="gz::sim::systems::Label">
+            <label>3</label>
+          </plugin>
         </visual>
         <pose>0 0 0 0 0 0</pose>
         <enable_wind>false</enable_wind>
@@ -350,6 +376,11 @@
             <diffuse>0 1 1 1</diffuse>
             <specular>1 1 1 1</specular>
           </material>
+        
+          <plugin filename="gz-sim-label-system"
+                  name="gz::sim::systems::Label">
+            <label>5</label>
+          </plugin>
         </visual>
         <pose>0 0 0 0 0 0</pose>
         <enable_wind>false</enable_wind>
@@ -487,6 +518,18 @@
             </lens>
             <optical_frame_id></optical_frame_id>
           </camera>
+        </sensor>
+        
+        <sensor name="instance_segmentation_camera" type="segmentation">
+          <topic>panoptic</topic>
+          <camera>
+            <segmentation_type>semantic</segmentation_type>
+            <horizontal_fov>1.05</horizontal_fov>
+            <image><width>640</width><height>480</height></image>
+            <clip><near>0.1</near><far>2.0</far></clip>
+          </camera>
+          <always_on>1</always_on>
+          <update_rate>10</update_rate>
         </sensor>
         <enable_wind>false</enable_wind>
       </link>
