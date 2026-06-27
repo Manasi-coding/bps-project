@@ -240,7 +240,7 @@
           <camera>
             <segmentation_type>semantic</segmentation_type>
             <horizontal_fov>1.05</horizontal_fov>
-            <image><width>640</width><height>480</height></image>
+            <image><width>256</width><height>256</height></image>
             <clip><near>0.1</near><far>2.0</far></clip>
           </camera>
           <always_on>1</always_on>

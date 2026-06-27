@@ -246,8 +246,8 @@
             <horizontal_fov>1.05</horizontal_fov>
 
             <image>
-              <width>640</width>
-              <height>480</height>
+              <width>256</width>
+              <height>256</height>
             </image>
 
             <clip>
