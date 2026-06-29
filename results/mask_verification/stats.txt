@@ -1,0 +1,33 @@
+Boundary Mask Verification
+==========================
+
+Scene: isolated_usb
+Boundary pixels : 96
+Boundary ratio  : 0.146%
+Visual verdict  : __________
+
+Scene: isolated_pen
+Boundary pixels : 67
+Boundary ratio  : 0.102%
+Visual verdict  : __________
+
+Scene: isolated_bottle
+Boundary pixels : 313
+Boundary ratio  : 0.478%
+Visual verdict  : __________
+
+Scene: touching
+Boundary pixels : 1232
+Boundary ratio  : 1.880%
+Visual verdict  : __________
+
+Scene: occluded
+Boundary pixels : 873
+Boundary ratio  : 1.332%
+Visual verdict  : __________
+
+Scene: thin_objects
+Boundary pixels : 328
+Boundary ratio  : 0.500%
+Visual verdict  : __________
+
