@@ -1624,7 +1624,7 @@
     </model>
     <model name='smartphone'>
       <static>true</static>
-      <pose>0.29438582062721252 -0.51999998092651367 0.77399998903274536 0 0 0</pose>
+      <pose>0.205 -0.520 0.774 0 0 0</pose>
       <link name='link'>
         <collision name='collision'>
           <geometry>
@@ -1707,7 +1707,7 @@
     </model>
     <model name='notebook'>
       <static>true</static>
-      <pose>0.16452674567699432 -0.51999998092651367 0.7850000262260437 0 0 0</pose>
+      <pose>0.155 -0.520 0.785 0 0 0</pose>
       <link name='link'>
         <collision name='collision'>
           <geometry>
@@ -2009,7 +2009,7 @@
           <pose>-0.042000000000000003 0 0 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.042000000000000003 0.034000000000000002 0.0050000000000000001</size>
+              <size>0.052 0.040 0.005</size>
             </box>
           </geometry>
           <material>
@@ -2040,7 +2040,7 @@
           <pose>0.042000000000000003 0 0 0 0 0</pose>
           <geometry>
             <box>
-              <size>0.042000000000000003 0.034000000000000002 0.0050000000000000001</size>
+              <size>0.052 0.040 0.005</size>
             </box>
           </geometry>
           <material>
