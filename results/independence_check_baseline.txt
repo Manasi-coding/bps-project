@@ -1,0 +1,64 @@
+Boundary Independence Check — Baseline Setup
+==================================================
+
+Scene: world1_primitives
+  Depth map shape: (480, 640)
+  Objects found: ['bottle', 'pen', 'ruler', 'usb']
+    bottle: boundary pixels = 495
+    pen: boundary pixels = 303
+    ruler: boundary pixels = 374
+    usb: boundary pixels = 396
+
+Scene: world2_household
+  Depth map shape: (480, 640)
+  Objects found: ['apple', 'coffee_mug', 'remote_control', 'smartphone']
+    apple: boundary pixels = 303
+    coffee_mug: boundary pixels = 413
+    remote_control: boundary pixels = 604
+    smartphone: boundary pixels = 587
+
+Scene: world3_kitchen_objects
+  Depth map shape: (480, 640)
+  Objects found: ['bottle', 'bowl', 'mug', 'spoon']
+    bottle: boundary pixels = 388
+    bowl: boundary pixels = 530
+    mug: boundary pixels = 164
+    spoon: boundary pixels = 336
+
+Scene: world4_office_objects
+  Depth map shape: (480, 640)
+  Objects found: ['calculator', 'mouse', 'stapler', 'usb_drive']
+    calculator: boundary pixels = 464
+    mouse: boundary pixels = 407
+    stapler: boundary pixels = 385
+    usb_drive: boundary pixels = 135
+
+Scene: world5_mixed_clutter
+  Depth map shape: (480, 640)
+  Objects found: ['book', 'bottle', 'bowl', 'calculator', 'mug', 'small_box', 'usb_drive']
+    book: boundary pixels = 928
+    bottle: boundary pixels = 530
+    bowl: boundary pixels = 747
+    calculator: boundary pixels = 640
+    mug: boundary pixels = 334
+    small_box: boundary pixels = 549
+    usb_drive: boundary pixels = 44
+
+Scene: world6_occlusion
+  Depth map shape: (480, 640)
+  Objects found: ['coffee_cup', 'laptop', 'notebook', 'smartphone', 'sunglasses', 'tape_dispenser', 'water_bottle']
+    coffee_cup: boundary pixels = 438
+    laptop: boundary pixels = 1371
+    notebook: boundary pixels = 1276
+    smartphone: boundary pixels = 456
+    sunglasses: boundary pixels = 749
+    tape_dispenser: boundary pixels = 513
+    water_bottle: boundary pixels = 468
+
+==================================================
+Scenes processed: 6
+Objects loaded successfully: 30
+
+Metric computation (boundary_iou, interior_rmse) was skipped:
+no second depth/mask source (e.g. corrupted depth maps) exists yet to compare against.
+This script currently validates baseline structure only.

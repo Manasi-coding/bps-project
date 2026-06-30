@@ -1,33 +1,33 @@
 Boundary Mask Verification
 ==========================
 
-Scene: isolated_usb
-Boundary pixels : 96
-Boundary ratio  : 0.146%
+Scene: world1_primitives
+Boundary pixels : 1568
+Boundary ratio  : 0.510%
 Visual verdict  : __________
 
-Scene: isolated_pen
-Boundary pixels : 67
-Boundary ratio  : 0.102%
+Scene: world2_household
+Boundary pixels : 1907
+Boundary ratio  : 0.621%
 Visual verdict  : __________
 
-Scene: isolated_bottle
-Boundary pixels : 313
-Boundary ratio  : 0.478%
+Scene: world3_kitchen_objects
+Boundary pixels : 1418
+Boundary ratio  : 0.462%
 Visual verdict  : __________
 
-Scene: touching
-Boundary pixels : 1232
-Boundary ratio  : 1.880%
+Scene: world4_office_objects
+Boundary pixels : 1391
+Boundary ratio  : 0.453%
 Visual verdict  : __________
 
-Scene: occluded
-Boundary pixels : 873
-Boundary ratio  : 1.332%
+Scene: world5_mixed_clutter
+Boundary pixels : 3772
+Boundary ratio  : 1.228%
 Visual verdict  : __________
 
-Scene: thin_objects
-Boundary pixels : 328
-Boundary ratio  : 0.500%
+Scene: world6_occlusion
+Boundary pixels : 5271
+Boundary ratio  : 1.716%
 Visual verdict  : __________
 
