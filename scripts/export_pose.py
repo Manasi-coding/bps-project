@@ -89,6 +89,80 @@ def parse_pose_string(pose_text):
     x, y, z, roll, pitch, yaw = (float(p) for p in parts)
     return x, y, z, roll, pitch, yaw
 
+def extract_dimensions(model):
+    """
+    Extract object dimensions from the model geometry.
+
+    Priority:
+      1. First collision geometry
+      2. First visual geometry
+
+    Returns:
+        (width, height, depth) in metres
+    """
+
+    geometry = None
+
+    # -------------------------
+    # Try collision first
+    # -------------------------
+    collision = model.find("link/collision")
+    if collision is not None:
+        geometry = collision.find("geometry")
+
+    # -------------------------
+    # If no collision geometry,
+    # fall back to first visual
+    # -------------------------
+    if geometry is None:
+        visual = model.find("link/visual")
+        if visual is not None:
+            geometry = visual.find("geometry")
+
+    if geometry is None:
+        return None, None, None
+
+    # -------------------------
+    # Box
+    # -------------------------
+    box = geometry.find("box")
+    if box is not None:
+        size = box.find("size")
+        if size is not None:
+            w, d, h = map(float, size.text.split())
+            return w, h, d
+
+    # -------------------------
+    # Cylinder
+    # -------------------------
+    cylinder = geometry.find("cylinder")
+    if cylinder is not None:
+        radius = float(cylinder.find("radius").text)
+        length = float(cylinder.find("length").text)
+        diameter = radius * 2.0
+        return diameter, length, diameter
+
+    # -------------------------
+    # Sphere
+    # -------------------------
+    sphere = geometry.find("sphere")
+    if sphere is not None:
+        radius = float(sphere.find("radius").text)
+        diameter = radius * 2.0
+        return diameter, diameter, diameter
+
+    # -------------------------
+    # Cone
+    # -------------------------
+    cone = geometry.find("cone")
+    if cone is not None:
+        radius = float(cone.find("radius").text)
+        length = float(cone.find("length").text)
+        diameter = radius * 2.0
+        return diameter, length, diameter
+
+    return None, None, None
+
 
 def extract_objects_from_sdf(sdf_path, known_objects):
     """
@@ -125,10 +199,20 @@ def extract_objects_from_sdf(sdf_path, known_objects):
             print(f"  WARNING: model '{name}' has malformed pose ({e}) — skipping")
             continue
 
+        width, height, depth = extract_dimensions(model)
+
         objects.append({
             "name": name,
-            "x": x, "y": y, "z": z,
-            "roll": roll, "pitch": pitch, "yaw": yaw,
+            "x": x,
+            "y": y,
+            "z": z,
+            "roll": roll,
+            "pitch": pitch,
+            "yaw": yaw,
+
+            "width": width,
+            "height": height,
+            "depth": depth,
         })
 
     if skipped_unknown:

@@ -143,18 +143,97 @@ class ResultsLogger:
         # and reuse the same instance for every object/trial.
         estimator = GraspEstimator()
 
+        # MOD: GraspEstimator.__init__ reads world_name from its own ROS
+        # parameter (default "") and loads ground_truth/<world_name>_pose.json
+        # + boundary/semantic mask dirs at construction time. log_results.py
+        # never passes world_name via --ros-args, so it stays "" and all of
+        # that silently fails to resolve. Set it from scene_name here and
+        # manually re-run the world_name-dependent setup that __init__
+        # already ran (with the empty value).
+        estimator.world_name = self.scene_name
+        # MOD: same issue as world_name — roi_x/y/z_range are ROS parameters
+        # on GraspEstimator with defaults tuned for a forward-facing robot
+        # camera (x=forward,y=left-right,z=up), but this pipeline uses a
+        # top-down camera producing points in optical frame (x=right,
+        # y=down, z=depth/forward). log_results.py never overrides these,
+        # so set them directly. TEMP: wide-open bounds first, to confirm
+        # points appear at all before narrowing to the real table region.
+        estimator.roi_x_range = (-1.0, 1.0)
+        estimator.roi_y_range = (-1.0, 1.0)
+        estimator.roi_z_range = (0.0, 2.0)
+        estimator._ground_truth_data = estimator._load_ground_truth_json()
+        estimator._ground_truth_load_warned = False
+        estimator._boundary_masks_path = os.path.join(
+            estimator.boundary_masks_dir, estimator.world_name)
+        estimator._semantic_masks_path = os.path.join(
+            estimator.semantic_masks_dir, estimator.world_name)
+        estimator._log_mask_dir_status("boundary masks", estimator._boundary_masks_path)
+        estimator._log_mask_dir_status("semantic masks", estimator._semantic_masks_path)
+
+        # MOD: DDS discovery for a freshly-created subscription can take a
+        # few seconds to match with depth_to_pointcloud's existing
+        # publisher. Under BEST_EFFORT QoS (no retained history), any cloud
+        # published before the match completes is dropped, not queued —
+        # so the first object tested can burn through its 10s warmup
+        # timeout before a single message arrives, even though later
+        # objects (same subscription, already matched) succeed in ~1-3s.
+        # Spin here, before the per-object loop starts, so discovery
+        # latency is absorbed once rather than risking the first object's
+        # trial being silently skipped.
+        log.info("Warming up pointcloud subscription (DDS discovery)...")
+        warmup_deadline = estimator.get_clock().now().nanoseconds + int(25.0 * 1e9)
+        while estimator.latest_cloud is None:
+            rclpy.spin_once(estimator, timeout_sec=0.1)
+            if estimator.get_clock().now().nanoseconds > warmup_deadline:
+                log.warning("Pointcloud subscription did not warm up within 25s.")
+                break
+
         for obj_name in self.test_objects:
+
             log.info("=" * 50)
             log.info(f"Testing object: {obj_name}")
             log.info("=" * 50)
 
             estimator.object_name  = obj_name
+
+            # MOD: the ROI was a single static box covering the whole
+            # table (set once before this loop), so every object's
+            # "estimate" was really measuring the same undifferentiated
+            # blob — same estimated width for cube/cylinder/sphere/cone.
+            # Center a tight box on this object's known ground-truth (x,y)
+            # instead. Cloud is in optical frame (x=right, y=down,
+            # z=depth), and objects sit on the table at world-frame-ish
+            # x/y from the JSON with real depth (z) in the 0.72-0.85m
+            # band observed earlier (table surface), well short of the
+            # ~1.16m floor sliver — so a modest half-width plus a tight
+            # z band isolates the object and excludes the rest of the
+            # table/floor.
+            gt_entry = estimator._ground_truth_data.get(obj_name) if estimator._ground_truth_data else None
+            if gt_entry is not None:
+                gt_x = float(gt_entry["x"])
+                gt_y = float(gt_entry["y"])
+                half_width = 0.15  # metres, generous margin around object footprint
+                estimator.roi_x_range = (gt_x - half_width, gt_x + half_width)
+                estimator.roi_y_range = (gt_y - half_width, gt_y + half_width)
+                estimator.roi_z_range = (0.0, 2.0)  # table surface band, now in world frame
+                log.info(
+                    f"ROI centered on '{obj_name}' GT pose: "
+                    f"x[{estimator.roi_x_range[0]:.2f},{estimator.roi_x_range[1]:.2f}] "
+                    f"y[{estimator.roi_y_range[0]:.2f},{estimator.roi_y_range[1]:.2f}]"
+                )
+            else:
+                log.warning(
+                    f"No ground-truth pose found for '{obj_name}' — "
+                    f"leaving ROI unchanged (results for this object "
+                    f"will likely be unreliable)."
+                )
+
             if self.require_fresh_cloud:
                 estimator.latest_cloud = None
 
             # Warm up — wait for first cloud
             log.info("Waiting for pointcloud...")
-            deadline = estimator.get_clock().now().nanoseconds + int(10.0 * 1e9)
+            deadline = estimator.get_clock().now().nanoseconds + int(20.0 * 1e9)
             while estimator.latest_cloud is None:
                 rclpy.spin_once(estimator, timeout_sec=0.1)
                 if estimator.get_clock().now().nanoseconds > deadline:
@@ -164,6 +243,11 @@ class ResultsLogger:
 
             # Run N trials for this object
             for trial in range(1, self.n_trials + 1):
+                # Spin to allow the estimator's subscription callback to
+                # receive a fresh cloud before each estimate() call.
+                # Without this, estimate() burns through the single buffered
+                # cloud and all remaining trials are skipped as stale.
+                rclpy.spin_once(estimator, timeout_sec=0.5)
                 result = estimator.estimate()
 
                 if result is not None:
@@ -186,10 +270,26 @@ class ResultsLogger:
                     "object_name":        obj_name,
                     "estimated_width_m":  round(result["estimated_width"],  4),
                     "estimated_height_m": round(result["estimated_height"], 4),
-                    "gt_width_m":         round(result["gt_width"],         4),
-                    "gt_height_m":        round(result["gt_height"],        4),
-                    "width_error_m":      round(result["width_error_m"],    4),
-                    "height_error_m":     round(result["height_error_m"],   4),
+                    "gt_width_m": (
+                        round(result["gt_width"], 4)
+                        if result["gt_width"] is not None
+                        else None
+                    ),
+                    "gt_height_m": (
+                        round(result["gt_height"], 4)
+                        if result["gt_height"] is not None
+                        else None
+                    ),
+                    "width_error_m": (
+                        round(result["width_error_m"], 4)
+                        if result["width_error_m"] is not None
+                        else None
+                    ),
+                    "height_error_m": (
+                        round(result["height_error_m"], 4)
+                        if result["height_error_m"] is not None
+                        else None
+                    ),
                     "decision":           decision,
                     "gt_decision":        gt_dec,
                     "correct":            correct,
@@ -202,11 +302,17 @@ class ResultsLogger:
                     evaluated_trials += 1
                 total_trials  += 1
 
+                gt_width_str = (
+                    f"{result['gt_width']:.3f}"
+                    if result["gt_width"] is not None
+                    else "N/A"
+                )
+
                 log.info(
                     f"[{obj_name} | trial {trial:02d}/{self.n_trials:02d} | "
                     f"{'OK' if correct else 'X'}] "
                     f"W_est={result['estimated_width']:.3f} "
-                    f"W_gt={result['gt_width']:.3f} | {decision}"
+                    f"W_gt={gt_width_str} | {decision}"
                 )
 
                 time.sleep(0.5)   # small pause between trials
@@ -269,14 +375,33 @@ def analyse_results(output_dir: str):
         correct       = [r for r in evaluated if r["correct"] == "True"]
         evaluated_trials = len(evaluated)
         accuracy      = (len(correct) / evaluated_trials * 100) if evaluated_trials > 0 else 0.0
-        width_errors  = [float(r["width_error_m"])  for r in rows]
-        height_errors = [float(r["height_error_m"]) for r in rows]
+        width_errors = [
+            float(r["width_error_m"])
+            for r in rows
+            if r["width_error_m"] not in ("", "None", None, "nan")
+        ]
+
+        height_errors = [
+            float(r["height_error_m"])
+            for r in rows
+            if r["height_error_m"] not in ("", "None", None, "nan")
+        ]
+
+        mean_w_err = (
+            sum(width_errors) / len(width_errors)
+            if width_errors else None
+        )
+
+        mean_h_err = (
+            sum(height_errors) / len(height_errors)
+            if height_errors else None
+        )
 
         data[condition + "_stats"] = {
-            "accuracy":      accuracy,
-            "mean_w_err":    sum(width_errors)  / len(width_errors),
-            "mean_h_err":    sum(height_errors) / len(height_errors),
-            "n_trials":      len(rows),
+            "accuracy": accuracy,
+            "mean_w_err": mean_w_err,
+            "mean_h_err": mean_h_err,
+            "n_trials": len(rows),
         }
 
     metrics = [
