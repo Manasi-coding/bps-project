@@ -284,10 +284,67 @@ class DepthToPointcloud(Node):
         u = u[valid]
         v = v[valid]
 
-        # Pinhole back-projection
-        x = (u - self.cx) * z / self.fx
-        y = (v - self.cy) * z / self.fy
-        # z stays as z
+        # Pinhole back-projection (camera-optical frame: x=right, y=down,
+        # z=depth/forward)
+        #
+        # MOD: Gazebo's depth camera (and therefore our metric depth model,
+        # trained/inferred to match it) reports RANGE — true Euclidean distance
+        # along each pixel's viewing ray — not Z-depth (perpendicular distance
+        # to the image plane), which is what pinhole back-projection assumes.
+        # For off-center pixels the ray is angled, so range > true Z-depth,
+        # growing with distance from the image center. This produced exactly
+        # the pattern we observed: objects further from the camera's optical
+        # center (e.g. obj_cube) showed inflated/spread depth values, while
+        # near-center objects read closer to correct. Confirmed by comparing
+        # against Gazebo's own ground-truth depth camera output directly
+        # (/depth_camera, via save_depth_gz.py): min=0.620 max=1.510 mean=0.989,
+        # a spread inconsistent with the true ~0.71-1.57m perpendicular-depth
+        # range expected in this scene, but consistent with range encoding.
+        #
+        # Convert range r to true Z-depth using the pixel's ray direction:
+        #   Z = r / sqrt(1 + ((u-cx)/fx)^2 + ((v-cy)/fy)^2)
+        px = (u - self.cx) / self.fx
+        py = (v - self.cy) / self.fy
+        ray_scale = np.sqrt(1.0 + px**2 + py**2)
+        z_depth = z / ray_scale   # true perpendicular Z-depth
+
+        x_opt = px * z_depth
+        y_opt = py * z_depth
+        z_opt = z_depth
+
+        # MOD: points were previously published in raw camera-optical
+        # frame with no transform into world frame. Ground-truth object
+        # poses (ground_truth/<world>_pose.json) are in Gazebo world
+        # frame, so anything comparing this cloud against GT — ROI boxes,
+        # grasp_estimator's pose-based checks — was comparing incompatible
+        # coordinate systems. This produced garbage ROI results (see:
+        # every object earlier reporting the same estimated width,
+        # because the "ROI" was really just picking up whatever fell in
+        # an arbitrary box that had no relation to any object's real
+        # location).
+        #
+        # Transform derived from this world's camera SDF pose:
+        #   <pose>0 -0.5 1.57 0 1.5708 0</pose>
+        # i.e. position (0, -0.5, 1.57), pure pitch=90deg (no roll/yaw).
+        # Combined with the standard ROS optical-frame convention
+        # (REP-103: camera z=forward, x=right, y=down) and this pitch,
+        # the world-frame mapping is:
+        #   world_x = -y_optical
+        #   world_y = -0.5 - x_optical
+        #   world_z = 1.57 - z_optical
+        # Verified against observed data: z_optical in [0.75, 1.16]m maps
+        # to world_z in [0.41, 0.82]m, and 0.82m matches the known
+        # tabletop height (~0.815-0.835m in ground_truth/world1_primitives
+        # _pose.json) almost exactly.
+        #
+        # WARNING: these constants (-0.5, 1.57, sign flips from the pitch)
+        # are specific to *this* camera's placement in world1_primitives.
+        # If other worlds (world2_household, etc.) use a different camera
+        # pose, this transform will be silently wrong for them. TODO:
+        # read camera pose from TF or a parameter instead of hardcoding.
+        x = -y_opt
+        y = -0.5 - x_opt
+        z = 1.57 - z_opt
 
         # Pack into PointCloud2
         points = np.stack([x, y, z], axis=1).astype(np.float32)

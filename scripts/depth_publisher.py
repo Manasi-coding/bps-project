@@ -40,31 +40,16 @@ MODEL_CONFIGS = {
     'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]},
 }
 
-
-# ── Exact same inference function as your run.py (UNCHANGED) ────────────
+# MOD: replaced hand-rolled preprocessing (square resize, no ImageNet
+# normalization, NEAREST interpolation) with the model's own infer_image()
+# method — same call run.py uses. The hand-rolled version diverged from
+# dpt.py's actual preprocessing pipeline (missing normalization, wrong
+# resize/interpolation, no PrepareForNet formatting), causing a systematic
+# ~6x depth overestimate (observed mean=5.03m vs true ~0.75m camera-to-
+# object distance in world1_primitives).
 def infer_image_metric(model, raw_image, input_size, device):
-    """
-    Copied directly from your run.py — NEAREST interpolation to preserve
-    metric depth accuracy and avoid smoothing artifacts at edges.
-    """
-    h, w = raw_image.shape[:2]
-
-    image = cv2.resize(raw_image, (input_size, input_size),
-                       interpolation=cv2.INTER_NEAREST)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0
-    image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0).float().to(device)
-
-    with torch.no_grad():
-        depth = model(image)
-
-    depth = torch.nn.functional.interpolate(
-        depth.unsqueeze(1),
-        size=(h, w),
-        mode='nearest'
-    ).squeeze()
-
-    return depth.cpu().numpy()   # float32, metres, same as run.py output
-
+    depth = model.infer_image(raw_image, input_size)
+    return depth.astype(np.float32)
 
 class DepthPublisher(Node):
     def __init__(self):
@@ -139,6 +124,24 @@ class DepthPublisher(Node):
             f"Input size: {input_size}"
         )
 
+        self.model = self.model.to(self.device).eval()
+        self.get_logger().info(
+            f"Model loaded. Encoder: {encoder}  Max depth: {max_depth:.1f}m  "
+            f"Input size: {input_size}"
+        )
+
+        # MOD: the first CPU inference call through a freshly-loaded model
+        # is dramatically slower than subsequent calls (kernel selection,
+        # memory allocation, no warm operator cache) — observed ~25-28s for
+        # a first frame vs ~3-5s steady-state. Run one dummy inference pass
+        # here, before subscribing to RGB or declaring ready, so this cost
+        # is absorbed at startup instead of silently eating into the first
+        # object's pointcloud-wait timeout during an actual experiment run.
+        self.get_logger().info("Warming up model with dummy inference pass...")
+        dummy_image = np.zeros((480, 640, 3), dtype=np.uint8)
+        _ = infer_image_metric(self.model, dummy_image, input_size, self.device)
+        self.get_logger().info("Model warm-up complete.")
+        
         # ── ROS 2 QoS suitable for camera topics ──────────────────────
         camera_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,

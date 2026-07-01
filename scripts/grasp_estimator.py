@@ -43,9 +43,9 @@ import sensor_msgs_py.point_cloud2 as pc2
 DEFAULT_CLOUD_TOPIC          = "/depth_model/pointcloud"
 DEFAULT_GRIPPER_MAX_WIDTH    = 0.077   # metres
 DEFAULT_GRIPPER_MAX_HEIGHT   = 0.120   # metres
-DEFAULT_ROI_X_RANGE          = (0.2, 1.2)
-DEFAULT_ROI_Y_RANGE          = (-0.4, 0.4)
-DEFAULT_ROI_Z_RANGE          = (0.0, 0.5)
+DEFAULT_ROI_X_RANGE          = (-0.3, 0.3)
+DEFAULT_ROI_Y_RANGE          = (-0.3, 0.3)
+DEFAULT_ROI_Z_RANGE          = (0.4, 2.0)
 DEFAULT_MIN_POINTS           = 50
 DEFAULT_VOXEL_SIZE           = 0.02
 DEFAULT_CLUSTER_RADIUS       = 0.30
@@ -608,10 +608,13 @@ class GraspEstimator(Node):
 
     def _estimate_dimensions(self, points: np.ndarray) -> Tuple[float, float, float]:
         """5th-95th percentile bounding box extent — unchanged from original."""
-        p5  = np.percentile(points,  5, axis=0)
+        p5  = np.percentile(points, 5,  axis=0)
         p95 = np.percentile(points, 95, axis=0)
         extent = p95 - p5
-        return float(extent[0]), float(extent[1]), float(extent[2])
+        width  = float(extent[0])    # left-right
+        height = float(extent[1])    # up-down
+        depth  = float(extent[2])    # into scene
+        return width, height, depth
 
     def _log_result(self, result: EstimationResult):
         if not result.object_detected:
