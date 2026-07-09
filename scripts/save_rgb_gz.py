@@ -9,7 +9,7 @@ from pathlib import Path
 Path('rgb_images').mkdir(exist_ok=True)
 
 scene_name = sys.argv[1] if len(sys.argv) > 1 else "scene"
-TIMEOUT = 20
+TIMEOUT = 60
 
 saved = False
 
@@ -19,6 +19,7 @@ def callback(msg):
         return
     data = np.frombuffer(msg.data, dtype=np.uint8)
     data = data.reshape(msg.height, msg.width, 3)
+    print(f"[{scene_name}] RGB shape = {data.shape}")
     bgr = cv2.cvtColor(data, cv2.COLOR_RGB2BGR)
     cv2.imwrite(f'rgb_images/{scene_name}_rgb.png', bgr)
     print(f"[{scene_name}] Saved rgb_images/{scene_name}_rgb.png — shape: {data.shape}")

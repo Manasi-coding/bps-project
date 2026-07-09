@@ -158,9 +158,7 @@ class ResultsLogger:
         # y=down, z=depth/forward). log_results.py never overrides these,
         # so set them directly. TEMP: wide-open bounds first, to confirm
         # points appear at all before narrowing to the real table region.
-        estimator.roi_x_range = (-1.0, 1.0)
-        estimator.roi_y_range = (-1.0, 1.0)
-        estimator.roi_z_range = (0.0, 2.0)
+        
         estimator._ground_truth_data = estimator._load_ground_truth_json()
         estimator._ground_truth_load_warned = False
         estimator._boundary_masks_path = os.path.join(
@@ -208,19 +206,37 @@ class ResultsLogger:
             # ~1.16m floor sliver — so a modest half-width plus a tight
             # z band isolates the object and excludes the rest of the
             # table/floor.
+
             gt_entry = estimator._ground_truth_data.get(obj_name) if estimator._ground_truth_data else None
             if gt_entry is not None:
-                gt_x = float(gt_entry["x"])
-                gt_y = float(gt_entry["y"])
-                half_width = 0.15  # metres, generous margin around object footprint
-                estimator.roi_x_range = (gt_x - half_width, gt_x + half_width)
-                estimator.roi_y_range = (gt_y - half_width, gt_y + half_width)
-                estimator.roi_z_range = (0.0, 2.0)  # table surface band, now in world frame
-                log.info(
-                    f"ROI centered on '{obj_name}' GT pose: "
-                    f"x[{estimator.roi_x_range[0]:.2f},{estimator.roi_x_range[1]:.2f}] "
-                    f"y[{estimator.roi_y_range[0]:.2f},{estimator.roi_y_range[1]:.2f}]"
-                )
+                # MOD: attempting to derive an exact world->cloud coordinate
+                # transform to center a tight per-object ROI proved unreliable
+                # (best-fit affine solve gave scale=0.73, not the expected 1.0
+                # for a rigid transform, indicating an unresolved ambiguity).
+                # The depth-margin filter + tight cluster_radius in
+                # grasp_estimator.py already isolates individual raised
+                # objects correctly on its own (confirmed: cluster_points
+                # dropped from 17902 to 2201, matching a single object's
+                # scale) — so leave the ROI wide and let that mechanism do
+                # the isolation instead of a possibly-wrong coordinate
+                # transform.
+                estimator.roi_x_range = (-1.0, 1.0)
+                estimator.roi_y_range = (-1.0, 1.0)
+                estimator.roi_z_range = (0.0, 2.0)
+            
+            # gt_entry = estimator._ground_truth_data.get(obj_name) if estimator._ground_truth_data else None
+            # if gt_entry is not None:
+            #     gt_x = float(gt_entry["x"])
+            #     gt_y = float(gt_entry["y"])
+            #     half_width = 0.15  # metres, generous margin around object footprint
+            #     estimator.roi_x_range = (gt_x - half_width, gt_x + half_width)
+            #     estimator.roi_y_range = (gt_y - half_width, gt_y + half_width)
+            #     estimator.roi_z_range = (0.0, 2.0)  # table surface band, now in world frame
+            #     log.info(
+            #         f"ROI centered on '{obj_name}' GT pose: "
+            #         f"x[{estimator.roi_x_range[0]:.2f},{estimator.roi_x_range[1]:.2f}] "
+            #         f"y[{estimator.roi_y_range[0]:.2f},{estimator.roi_y_range[1]:.2f}]"
+            #     )
             else:
                 log.warning(
                     f"No ground-truth pose found for '{obj_name}' — "

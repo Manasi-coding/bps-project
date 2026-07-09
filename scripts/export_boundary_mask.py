@@ -4,53 +4,41 @@ import cv2
 from pathlib import Path
 
 SCENE_LABELS = {
-    "world1_primitives": {
-        1: "usb",
-        2: "bottle",
-        3: "pen",
-        4: "ruler",
+    "world1_baseline": {
+        1: "obj_bottle", 2: "obj_mug", 3: "obj_bowl", 4: "obj_apple",
+        5: "obj_spoon", 6: "obj_plate", 7: "obj_tissue_box", 8: "obj_cereal_box",
+        9: "obj_notebook", 10: "obj_remote", 11: "obj_toy_block", 12: "obj_banana",
     },
-
-    "world2_household": {
-        1: "coffee_mug",
-        2: "smartphone",
-        3: "apple",
-        4: "remote_control",
+    "world2_dense_clutter": {
+        1: "obj_bottle", 2: "obj_mug", 3: "obj_tissue_box", 4: "obj_jar",
+        5: "obj_cereal_box", 6: "obj_banana", 7: "obj_bowl", 8: "obj_apple",
+        9: "obj_tomato", 10: "obj_plate", 11: "obj_spoon", 12: "obj_fork",
+        13: "obj_kettle", 14: "obj_cup", 15: "obj_chopping_board", 16: "obj_knife",
     },
-
-    "world3_kitchen_objects": {
-        1: "mug",
-        2: "bowl",
-        3: "bottle",
-        4: "spoon",
+    "world3_thin_objects": {
+        1: "obj_plate", 2: "obj_fork", 3: "obj_bottle", 4: "obj_mug",
+        5: "obj_toothbrush", 6: "obj_notebook", 7: "obj_pen", 8: "obj_pencil",
+        9: "obj_knife", 10: "obj_spoon", 11: "obj_ruler", 12: "obj_cable",
+        13: "obj_chopstick_a", 14: "obj_chopstick_b", 15: "obj_straw",
     },
-
-    "world4_office_objects": {
-        1: "usb_drive",
-        2: "mouse",
-        3: "calculator",
-        4: "stapler",
+    "world4_support_scene": {
+        1: "obj_cereal_box", 2: "obj_tissue_box", 3: "obj_storage_box", 4: "obj_wooden_crate",
+        5: "obj_bottle", 6: "obj_mug", 7: "obj_bowl", 8: "obj_plate",
+        9: "obj_notebook", 10: "obj_book", 11: "obj_toy_cube", 12: "obj_sponge",
+        13: "obj_can", 14: "obj_glass_jar", 15: "obj_container",
     },
-
-    "world5_mixed_clutter": {
-        1: "mug",
-        2: "bottle",
-        3: "book",
-        4: "calculator",
-        5: "usb_drive",
-        6: "bowl",
-        7: "small_box",
+    "world5_occlusion_scene": {
+        1: "obj_cereal_box", 2: "obj_bottle", 3: "obj_jar", 4: "obj_tissue_box",
+        5: "obj_cup", 6: "obj_bowl", 7: "obj_apple", 8: "obj_can",
+        9: "obj_remote", 10: "obj_notebook", 11: "obj_book", 12: "obj_plate",
+        13: "obj_mug", 14: "obj_sponge", 15: "obj_container", 16: "obj_toy", 17: "obj_banana",
     },
-
-    "world6_occlusion": {
-        1: "laptop",
-        2: "coffee_cup",
-        3: "smartphone",
-        4: "notebook",
-        5: "tape_dispenser",
-        6: "water_bottle",
-        7: "sunglasses",
-    }
+    "world6_dense_mixed": {
+        1: "obj_bottle", 2: "obj_mug", 3: "obj_jar", 4: "obj_cereal_box",
+        5: "obj_tissue_box", 6: "obj_bowl", 7: "obj_apple", 8: "obj_banana",
+        9: "obj_notebook", 10: "obj_remote", 11: "obj_pen", 12: "obj_ruler",
+        13: "obj_plate", 14: "obj_spoon", 15: "obj_fork", 16: "obj_knife",
+    },
 }
 RING_WIDTH = 5  # must match export_masks.py for consistent boundary semantics; used only in fallback
 

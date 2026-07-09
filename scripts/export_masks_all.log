@@ -1,0 +1,66 @@
+==================================================
+Processing world1_primitives...
+[world1_primitives] Waiting for semantic frame on /semantic_camera/labels_map (timeout 20s)...
+[world1_primitives] Frame t=180s  shape=(480, 640, 3)  channels=3
+[world1_primitives] Unique label values: [0 1 2 3 4]
+[world1_primitives]   ✓ obj_cube: mask=4195px  ring=396px
+[world1_primitives]   ✓ obj_cylinder: mask=4210px  ring=495px
+[world1_primitives]   ✓ obj_sphere: mask=2982px  ring=303px
+[world1_primitives]   ✓ obj_cone: mask=2798px  ring=374px
+[world1_primitives] Saved 4 objects to data/masks/world1_primitives
+
+==================================================
+Processing world2_household...
+[world2_household] Waiting for semantic frame on /semantic_camera/labels_map (timeout 20s)...
+[world2_household] Frame t=181s  shape=(480, 640, 3)  channels=3
+[world2_household] Unique label values: [0 1 2 3 4]
+[world2_household]   ✓ coffee_mug: mask=4195px  ring=396px
+[world2_household]   ✓ smartphone: mask=4210px  ring=495px
+[world2_household]   ✓ apple: mask=2982px  ring=303px
+[world2_household]   ✓ remote_control: mask=2798px  ring=374px
+[world2_household] Saved 4 objects to data/masks/world2_household
+
+==================================================
+Processing world3_kitchen_objects...
+[world3_kitchen_objects] Waiting for semantic frame on /semantic_camera/labels_map (timeout 20s)...
+[world3_kitchen_objects] Frame t=181s  shape=(480, 640, 3)  channels=3
+[world3_kitchen_objects] Unique label values: [0 1 2 3 4]
+[world3_kitchen_objects]   ✓ mug: mask=4195px  ring=396px
+[world3_kitchen_objects]   ✓ bowl: mask=4210px  ring=495px
+[world3_kitchen_objects]   ✓ bottle: mask=2982px  ring=303px
+[world3_kitchen_objects]   ✓ spoon: mask=2798px  ring=374px
+[world3_kitchen_objects] Saved 4 objects to data/masks/world3_kitchen_objects
+
+==================================================
+Processing world4_office_objects...
+[world4_office_objects] Waiting for semantic frame on /semantic_camera/labels_map (timeout 20s)...
+[world4_office_objects] Frame t=181s  shape=(480, 640, 3)  channels=3
+[world4_office_objects] Unique label values: [0 1 2 3 4]
+[world4_office_objects]   ✓ usb_drive: mask=4195px  ring=396px
+[world4_office_objects]   ✓ mouse: mask=4210px  ring=495px
+[world4_office_objects]   ✓ calculator: mask=2982px  ring=303px
+[world4_office_objects]   ✓ stapler: mask=2798px  ring=374px
+[world4_office_objects] Saved 4 objects to data/masks/world4_office_objects
+
+==================================================
+Processing world5_mixed_clutter...
+[world5_mixed_clutter] Waiting for semantic frame on /semantic_camera/labels_map (timeout 20s)...
+[world5_mixed_clutter] Frame t=181s  shape=(480, 640, 3)  channels=3
+[world5_mixed_clutter] Unique label values: [0 1 2 3 4]
+[world5_mixed_clutter]   ✓ mug: mask=4195px  ring=396px
+[world5_mixed_clutter]   ✓ bottle: mask=4210px  ring=495px
+[world5_mixed_clutter]   ✓ book: mask=2982px  ring=303px
+[world5_mixed_clutter]   ✓ calculator: mask=2798px  ring=374px
+[world5_mixed_clutter] Saved 4 objects to data/masks/world5_mixed_clutter
+
+==================================================
+Processing world6_occlusion...
+[world6_occlusion] Waiting for semantic frame on /semantic_camera/labels_map (timeout 20s)...
+[world6_occlusion] Frame t=182s  shape=(480, 640, 3)  channels=3
+[world6_occlusion] Unique label values: [0 1 2 3 4]
+[world6_occlusion]   ✓ laptop: mask=4195px  ring=396px
+[world6_occlusion]   ✓ coffee_cup: mask=4210px  ring=495px
+[world6_occlusion]   ✓ smartphone: mask=2982px  ring=303px
+[world6_occlusion]   ✓ notebook: mask=2798px  ring=374px
+[world6_occlusion] Saved 4 objects to data/masks/world6_occlusion
+

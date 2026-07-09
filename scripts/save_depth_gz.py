@@ -8,7 +8,7 @@ from pathlib import Path
 Path('depth_maps').mkdir(exist_ok=True)
 
 scene_name = sys.argv[1] if len(sys.argv) > 1 else "scene"
-TIMEOUT = 20
+TIMEOUT = 60
 
 saved = False
 valid_data = False
@@ -19,6 +19,7 @@ def callback(msg):
         return
     data = np.frombuffer(msg.data, dtype=np.float32)
     data = data.reshape(msg.height, msg.width)
+    print(f"[{scene_name}] Depth shape = {data.shape}")
     np.save(f'depth_maps/{scene_name}_depth.npy', data)
 
     valid = data[np.isfinite(data) & (data > 0)]

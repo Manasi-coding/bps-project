@@ -38,6 +38,10 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 
+from sensor_msgs.msg import Image, CameraInfo
+from cv_bridge import CvBridge
+import cv2 
+
 
 # ── Configuration (overridable via ROS 2 parameters) ─────────────────────
 DEFAULT_CLOUD_TOPIC          = "/depth_model/pointcloud"
@@ -48,7 +52,13 @@ DEFAULT_ROI_Y_RANGE          = (-0.3, 0.3)
 DEFAULT_ROI_Z_RANGE          = (0.4, 2.0)
 DEFAULT_MIN_POINTS           = 50
 DEFAULT_VOXEL_SIZE           = 0.02
-DEFAULT_CLUSTER_RADIUS       = 0.30
+# MOD: 0.30m radius was larger than the spacing between objects on the
+# table (~0.25-0.55m apart per world1_primitives.sdf), so clustering
+# merged the entire tabletop — all four objects plus surrounding table —
+# into a single blob rather than isolating one object. Objects here are
+# all <15cm across; a tighter radius keeps a comfortable margin around
+# the largest object without bridging to its neighbors.
+DEFAULT_CLUSTER_RADIUS       = 0.07
 # MOD: eval timer was ticking (1 Hz) faster than the depth model can
 # produce frames on CPU (~3-10s per frame), so every object logged 1-2
 # "no pointcloud" warnings before a real frame arrived. Not a bug, just
@@ -147,15 +157,34 @@ class GraspEstimator(Node):
         self._log_mask_dir_status("boundary masks", self._boundary_masks_path)
         self._log_mask_dir_status("semantic masks", self._semantic_masks_path)
 
-        # ── QoS ────────────────────────────────────────────────────────
-        cloud_qos = QoSProfile(
+        # MOD: switched from consuming the pre-built PointCloud2 (which
+        # loses pixel identity, making per-object isolation depend on
+        # fragile spatial clustering/coordinate-transform guessing) to
+        # subscribing to the raw depth image + camera_info directly.
+        # This lets us apply the semantic mask at the pixel level before
+        # back-projecting, giving exact per-object point isolation.
+        sensor_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
         )
+        self.bridge = CvBridge()
+        self.latest_depth_image = None
+        self.latest_cloud = None
+        self.fx = self.fy = self.cx = self.cy = None
         self.create_subscription(
-            PointCloud2, self.cloud_topic, self._cloud_callback, cloud_qos
+            PointCloud2, self.cloud_topic, self._cloud_callback, sensor_qos
         )
+        # self.bridge = CvBridge()
+        # self.latest_depth_image = None
+        # self.latest_cloud = None  # MOD: kept as a compatibility flag for log_results.py's warm-up wait loop
+        # self.fx = self.fy = self.cx = self.cy = None
+        # self.create_subscription(
+        #     Image, "/depth_model/depth_image", self._depth_callback, sensor_qos
+        # )
+        # self.create_subscription(
+        #     CameraInfo, "/camera_info", self._camera_info_callback, sensor_qos
+        # )
 
         # ── Evaluation timer ───────────────────────────────────────────
         period = 1.0 / max(self.eval_rate_hz, 1e-3)
@@ -168,6 +197,11 @@ class GraspEstimator(Node):
             f"GT='{self.ground_truth_source}' | "
             f"cloud='{self.cloud_topic}'"
         )
+
+    def _cloud_callback(self, msg: PointCloud2):
+        self._frames_received += 1
+        self.latest_cloud = msg
+        self.latest_cloud_stamp_sec = time.monotonic()
 
     # ── Parameter loading / validation ───────────────────────────────────
     def _load_params(self):
@@ -374,10 +408,28 @@ class GraspEstimator(Node):
         return result
 
     # ── Callbacks ─────────────────────────────────────────────────────
-    def _cloud_callback(self, msg: PointCloud2):
+    def _depth_callback(self, msg: Image):
         self._frames_received += 1
-        self.latest_cloud = msg
-        self.latest_cloud_stamp_sec = time.monotonic()
+        try:
+            self.latest_depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
+            self.latest_cloud = self.latest_depth_image  # compatibility flag
+            self.latest_cloud_stamp_sec = time.monotonic()
+            if not getattr(self, "_printed_depth_range_once", False):
+                d = self.latest_depth_image
+                finite = d[np.isfinite(d)]
+                print(
+                    f"DEBUG DEPTH RANGE: min={finite.min():.4f} max={finite.max():.4f} "
+                    f"median={np.median(finite):.4f} shape={d.shape} "
+                    f"pct_in_0.05_5.0={100.0*np.mean((finite > 0.05) & (finite < 5.0)):.1f}%",
+                    flush=True,
+                )
+                self._printed_depth_range_once = True
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert depth image: {e}")
+
+    def _camera_info_callback(self, msg: CameraInfo):
+        K = np.array(msg.k).reshape(3, 3)
+        self.fx, self.fy, self.cx, self.cy = K[0,0], K[1,1], K[0,2], K[1,2]
 
     # ── Main evaluation loop (timer-driven) ──────────────────────────────
     def _evaluate_tick(self):
@@ -385,11 +437,14 @@ class GraspEstimator(Node):
         if result is not None:
             self._log_result(result)
 
+
     def estimate(self) -> Optional[EstimationResult]:
-        """Run one full estimation pass on the latest available cloud."""
-        if self.latest_cloud is None:
+        """Run one full estimation pass using the semantic mask to isolate
+        this object's exact pixels from the raw depth image, then
+        back-project only those pixels to 3D."""
+        if self.latest_depth_image is None or self.fx is None:
             self.get_logger().warn(
-                "No pointcloud received yet on '%s'." % self.cloud_topic,
+                "Waiting for depth image and camera_info...",
                 throttle_duration_sec=10.0,
             )
             return None
@@ -398,117 +453,103 @@ class GraspEstimator(Node):
         if age > self.cloud_staleness_sec:
             self._frames_skipped_stale += 1
             self.get_logger().warn(
-                f"Latest pointcloud is {age:.2f}s old (> "
-                f"{self.cloud_staleness_sec:.2f}s threshold) — skipping "
-                f"this evaluation tick.",
+                f"Latest depth frame is {age:.2f}s old (> "
+                f"{self.cloud_staleness_sec:.2f}s threshold) — skipping.",
                 throttle_duration_sec=5.0,
             )
             return None
 
-        cloud_msg = self.latest_cloud
-
-        # ── Step 1: Extract points from ROS message ────────────────────
-        try:
-            points = self._unpack_cloud(cloud_msg)
-        except Exception as e:
-            self._frames_skipped_invalid += 1
-            self.get_logger().error(f"Failed to unpack PointCloud2: {e}")
+        if not self.object_name:
             return None
 
-        if points.size == 0:
-            self._frames_skipped_invalid += 1
-            self.get_logger().warn(
-                "Unpacked pointcloud is empty — skipping.",
-                throttle_duration_sec=5.0,
+        # ── Load this object's semantic mask ─────────────────────────
+        mask_path = os.path.join(self._semantic_masks_path, f"{self.object_name}_mask.npy")
+        if not os.path.isfile(mask_path):
+            self.get_logger().error(
+                f"Mask not found for '{self.object_name}': {mask_path}",
+                throttle_duration_sec=10.0,
             )
             return EstimationResult(object_detected=False,
                                      world_name=self.world_name,
                                      object_name=self.object_name)
 
-        if points.ndim != 2 or points.shape[1] != 3:
-            self._frames_skipped_invalid += 1
+        mask = np.load(mask_path)  # (H, W) uint8, 1 where object present
+        depth = self.latest_depth_image
+
+        if mask.shape != depth.shape:
             self.get_logger().error(
-                f"Unpacked pointcloud has unexpected shape {points.shape} "
-                f"— expected (N, 3). Skipping.")
+                f"Mask shape {mask.shape} != depth shape {depth.shape} — "
+                f"cannot apply.", throttle_duration_sec=10.0,
+            )
             return None
 
-        if not np.all(np.isfinite(points)):
-            finite_mask = np.isfinite(points).all(axis=1)
-            n_bad = int(np.count_nonzero(~finite_mask))
-            points = points[finite_mask]
-            self.get_logger().warn(
-                f"Dropped {n_bad} non-finite point(s) from cloud.",
-                throttle_duration_sec=5.0,
-            )
+        print(f"DEBUG shapes: depth={self.latest_depth_image.shape}, mask={mask.shape}")
 
-        # MOD: temporary diagnostic — print actual point cloud bounds to check
-        # against roi_x/y/z_range assumptions
-        self.get_logger().info(
-            f"DEBUG cloud bounds: x[{points[:,0].min():.2f},{points[:,0].max():.2f}] "
-            f"y[{points[:,1].min():.2f},{points[:,1].max():.2f}] "
-            f"z[{points[:,2].min():.2f},{points[:,2].max():.2f}]",
-            throttle_duration_sec=2.0,
-        )
+        # ── Back-project only masked pixels ───────────────────────────
+        vs, us = np.nonzero(mask)
+        zs = depth[vs, us]
 
-        # ── Step 2: Filter to region of interest ────────────────────────
-        roi_points = self._filter_roi(points)
+        # Keep a copy of the pre-range-filter counts for tracing
+        vs_all, us_all, zs_all = vs, us, zs
 
-        # MOD: temporary diagnostic — see the actual z distribution inside
-        # this object's ROI before applying any table-height cutoff, since
-        # guessing TABLE_Z blind hasn't matched observed behavior.
-        if len(roi_points) > 0:
-            z_vals = roi_points[:, 2]
-            self.get_logger().info(
-                f"DEBUG roi z distribution: min={z_vals.min():.3f} "
-                f"p10={np.percentile(z_vals,10):.3f} "
-                f"p50={np.percentile(z_vals,50):.3f} "
-                f"p90={np.percentile(z_vals,90):.3f} "
-                f"max={z_vals.max():.3f}",
-                throttle_duration_sec=2.0,
-            )
+        valid = np.isfinite(zs) & (zs > 0.05) & (zs < 5.0)
+        vs, us, zs = vs[valid], us[valid], zs[valid]
 
-        # MOD: ROI alone isn't enough to isolate an object from the table
-        # surface — the camera looks straight down, so most points inside
-        # a per-object ROI box are the flat tabletop, not the object
-        # itself (observed: 3627 ROI points for a 9cm cube, barely reduced
-        # by clustering, producing a garbage undersized width estimate
-        # dominated by table-plane noise). Objects sit on a known table
-        # height (~0.815-0.835m); keep only points meaningfully above
-        # that, which isolates the raised object.
-        TABLE_Z = 0.82
-        above_table_mask = roi_points[:, 2] > (TABLE_Z + 0.01)
-        roi_points = roi_points[above_table_mask]
-
-        # MOD: temporary diagnostic — compare ROI point count (post
-        # table-height filter) vs post-clustering point count.
-        self.get_logger().info(
-            f"DEBUG roi->cluster: roi_points={len(roi_points)}",
-            throttle_duration_sec=2.0,
-        )
-        object_points = self._cluster_largest(roi_points)
-        self.get_logger().info(
-            f"DEBUG cluster result: cluster_points={len(object_points)}",
-            throttle_duration_sec=2.0,
-        )
-
-        # ── Step 3: Isolate the main object ──────────────────────────
-        if len(object_points) < self.min_points_for_object:
+        if len(zs) < self.min_points_for_object:
             return EstimationResult(
                 object_detected=False,
                 world_name=self.world_name,
                 object_name=self.object_name,
-                num_roi_points=len(roi_points),
-                num_cluster_points=len(object_points),
+                num_roi_points=len(zs),
+                num_cluster_points=len(zs),
             )
 
-        # ── Step 4: Estimate bounding dimensions ────────────────────────
+        median_z = float(np.median(zs))
+        mad = float(np.median(np.abs(zs - median_z)))
+        depth_gate = median_z + max(6 * mad, 0.03)  # generous but rejects background
+        p5, p95 = np.percentile(zs, [5, 95])
+        keep = zs <= depth_gate
+        vs, us, zs = vs[keep], us[keep], zs[keep]
+
+        # Detailed trace for obj_sphere only (non-invasive)
+        if self.object_name == 'obj_sphere':
+            try:
+                self.get_logger().info(
+                    f"TRACE INPUT obj_sphere: mask_pixels={len(vs_all)} "
+                    f"valid_pixels_after_range={len(zs_all)} "
+                    f"median_z={median_z:.9f} mad={mad:.9f} depth_gate={depth_gate:.9f} "
+                    f"p5={p5:.9f} p95={p95:.9f} kept_after_gate={len(zs)}"
+                )
+            except Exception:
+                pass
+
+        # Store tracing counters for use inside _estimate_dimensions
+        if self.object_name == 'obj_sphere':
+            self._trace_mask_pixels = int(len(vs_all))
+            self._trace_valid_pixels = int(len(zs_all))
+            self._trace_after_depth_filter = int(len(zs))
+
         try:
-            est_w, est_h, est_d = self._estimate_dimensions(object_points)
+            est_w, est_h, est_d = self._estimate_dimensions(vs, us, zs)
         except Exception as e:
             self.get_logger().error(f"Dimension estimation failed: {e}")
             return None
 
-        # ── Step 5: Grasp decision ──────────────────────────────────────
+        num_mask_points = len(zs)
+        self.get_logger().info(
+            f"DEBUG mask points: {num_mask_points}",
+            throttle_duration_sec=2.0,
+        )
+
+        if num_mask_points < self.min_points_for_object:
+            return EstimationResult(
+                object_detected=False,
+                world_name=self.world_name,
+                object_name=self.object_name,
+                num_roi_points=num_mask_points,
+                num_cluster_points=num_mask_points,
+            )
+
         can_grasp = (est_w <= self.gripper_max_width and
                      est_h <= self.gripper_max_height)
 
@@ -520,14 +561,10 @@ class GraspEstimator(Node):
             estimated_height=est_h,
             estimated_depth=est_d,
             can_grasp=can_grasp,
-            num_roi_points=len(roi_points),
-            num_cluster_points=len(object_points),
+            num_roi_points=num_mask_points,
+            num_cluster_points=num_mask_points,
         )
 
-        # ── Step 6: Ground truth — pose + dimensions ───────────────────
-        # export_pose.py now exports width/height/depth from SDF geometry,
-        # so dimension-based evaluation is active whenever those fields are
-        # non-None. Pose fields are always attached when available.
         gt = self._get_ground_truth()
         if gt is not None:
             result.ground_truth_available = True
@@ -546,7 +583,7 @@ class GraspEstimator(Node):
                 result.gt_dimensions_available = True
                 result.gt_width  = gt_w
                 result.gt_height = gt_h
-                result.gt_depth  = gt_d  # may still be None for some geometries
+                result.gt_depth  = gt_d
 
                 result.gt_can_grasp = (gt_w <= self.gripper_max_width and
                                        gt_h <= self.gripper_max_height)
@@ -561,6 +598,194 @@ class GraspEstimator(Node):
 
         self._frames_evaluated += 1
         return result
+
+        
+    # "def estimate(self) -> Optional[EstimationResult]:
+    #     """Run one full estimation pass on the latest available cloud."""
+    #     if self.latest_cloud is None:
+    #         self.get_logger().warn(
+    #             "No pointcloud received yet on '%s'." % self.cloud_topic,
+    #             throttle_duration_sec=10.0,
+    #         )
+    #         return None
+
+    #     age = time.monotonic() - self.latest_cloud_stamp_sec
+    #     if age > self.cloud_staleness_sec:
+    #         self._frames_skipped_stale += 1
+    #         self.get_logger().warn(
+    #             f"Latest pointcloud is {age:.2f}s old (> "
+    #             f"{self.cloud_staleness_sec:.2f}s threshold) — skipping "
+    #             f"this evaluation tick.",
+    #             throttle_duration_sec=5.0,
+    #         )
+    #         return None
+
+    #     cloud_msg = self.latest_cloud
+
+    #     # ── Step 1: Extract points from ROS message ────────────────────
+    #     try:
+    #         points = self._unpack_cloud(cloud_msg)
+    #     except Exception as e:
+    #         self._frames_skipped_invalid += 1
+    #         self.get_logger().error(f"Failed to unpack PointCloud2: {e}")
+    #         return None
+
+    #     if points.size == 0:
+    #         self._frames_skipped_invalid += 1
+    #         self.get_logger().warn(
+    #             "Unpacked pointcloud is empty — skipping.",
+    #             throttle_duration_sec=5.0,
+    #         )
+    #         return EstimationResult(object_detected=False,
+    #                                  world_name=self.world_name,
+    #                                  object_name=self.object_name)
+
+    #     if points.ndim != 2 or points.shape[1] != 3:
+    #         self._frames_skipped_invalid += 1
+    #         self.get_logger().error(
+    #             f"Unpacked pointcloud has unexpected shape {points.shape} "
+    #             f"— expected (N, 3). Skipping.")
+    #         return None
+
+    #     if not np.all(np.isfinite(points)):
+    #         finite_mask = np.isfinite(points).all(axis=1)
+    #         n_bad = int(np.count_nonzero(~finite_mask))
+    #         points = points[finite_mask]
+    #         self.get_logger().warn(
+    #             f"Dropped {n_bad} non-finite point(s) from cloud.",
+    #             throttle_duration_sec=5.0,
+    #         )
+
+    #     # MOD: temporary diagnostic — print actual point cloud bounds to check
+    #     # against roi_x/y/z_range assumptions
+    #     self.get_logger().info(
+    #         f"DEBUG cloud bounds: x[{points[:,0].min():.2f},{points[:,0].max():.2f}] "
+    #         f"y[{points[:,1].min():.2f},{points[:,1].max():.2f}] "
+    #         f"z[{points[:,2].min():.2f},{points[:,2].max():.2f}]",
+    #         throttle_duration_sec=2.0,
+    #     )
+
+    #     # ── Step 2: Filter to region of interest ────────────────────────
+    #     roi_points = self._filter_roi(points)
+
+    #     # MOD: temporary diagnostic — see the actual z distribution inside
+    #     # this object's ROI before applying any table-height cutoff, since
+    #     # guessing TABLE_Z blind hasn't matched observed behavior.
+    #     if len(roi_points) > 0:
+    #         z_vals = roi_points[:, 2]
+    #         self.get_logger().info(
+    #             f"DEBUG roi z distribution: min={z_vals.min():.3f} "
+    #             f"p10={np.percentile(z_vals,10):.3f} "
+    #             f"p50={np.percentile(z_vals,50):.3f} "
+    #             f"p90={np.percentile(z_vals,90):.3f} "
+    #             f"max={z_vals.max():.3f}",
+    #             throttle_duration_sec=2.0,
+    #         )
+
+    #     # MOD: TABLE_DEPTH as a single fixed threshold was still admitting
+    #     # a large slab of table surface alongside the object (observed
+    #     # ~20k points surviving, virtually unreduced by clustering, giving
+    #     # width estimates ~3x true size). Objects are small (<15cm) so
+    #     # their surface should form a narrow depth band near the closest
+    #     # (minimum) point in the ROI — keep only points within that band,
+    #     # not everything above an arbitrary fixed depth.
+    #     if len(roi_points) > 0:
+    #         min_depth_in_roi = roi_points[:, 2].min()
+    #         OBJECT_DEPTH_MARGIN = 0.02  # metres — tightened from 0.05 for diagnostic
+    #         close_mask = roi_points[:, 2] < (min_depth_in_roi + OBJECT_DEPTH_MARGIN)
+    #         roi_points = roi_points[close_mask]
+
+    #     # MOD: temporary diagnostic — compare ROI point count (post
+    #     # table-height filter) vs post-clustering point count.
+    #     self.get_logger().info(
+    #         f"DEBUG roi->cluster: roi_points={len(roi_points)}",
+    #         throttle_duration_sec=2.0,
+    #     )
+    #     object_points = self._cluster_largest(roi_points)
+
+    #     if len(object_points) > 0:
+    #         centroid = object_points.mean(axis=0)
+    #         self.get_logger().info(
+    #             f"DEBUG cluster centroid (cloud frame): "
+    #             f"x={centroid[0]:.3f} y={centroid[1]:.3f} z={centroid[2]:.3f}",
+    #             throttle_duration_sec=2.0,
+    #         )
+
+    #     self.get_logger().info(
+    #         f"DEBUG cluster result: cluster_points={len(object_points)}",
+    #         throttle_duration_sec=2.0,
+    #     )
+
+    #     # ── Step 3: Isolate the main object ──────────────────────────
+    #     if len(object_points) < self.min_points_for_object:
+    #         return EstimationResult(
+    #             object_detected=False,
+    #             world_name=self.world_name,
+    #             object_name=self.object_name,
+    #             num_roi_points=len(roi_points),
+    #             num_cluster_points=len(object_points),
+    #         )
+
+    #     # ── Step 4: Estimate bounding dimensions ────────────────────────
+    #     try:
+    #         est_w, est_h, est_d = self._estimate_dimensions(object_points)
+    #     except Exception as e:
+    #         self.get_logger().error(f"Dimension estimation failed: {e}")
+    #         return None
+
+    #     # ── Step 5: Grasp decision ──────────────────────────────────────
+    #     can_grasp = (est_w <= self.gripper_max_width and
+    #                  est_h <= self.gripper_max_height)
+
+    #     result = EstimationResult(
+    #         object_detected=True,
+    #         world_name=self.world_name,
+    #         object_name=self.object_name,
+    #         estimated_width=est_w,
+    #         estimated_height=est_h,
+    #         estimated_depth=est_d,
+    #         can_grasp=can_grasp,
+    #         num_roi_points=len(roi_points),
+    #         num_cluster_points=len(object_points),
+    #     )
+
+    #     # ── Step 6: Ground truth — pose + dimensions ───────────────────
+    #     # export_pose.py now exports width/height/depth from SDF geometry,
+    #     # so dimension-based evaluation is active whenever those fields are
+    #     # non-None. Pose fields are always attached when available.
+    #     gt = self._get_ground_truth()
+    #     if gt is not None:
+    #         result.ground_truth_available = True
+    #         result.gt_pose_x = gt["x"]
+    #         result.gt_pose_y = gt["y"]
+    #         result.gt_pose_z = gt["z"]
+    #         result.gt_roll   = gt["roll"]
+    #         result.gt_pitch  = gt["pitch"]
+    #         result.gt_yaw    = gt["yaw"]
+
+    #         gt_w = gt["width"]
+    #         gt_h = gt["height"]
+    #         gt_d = gt["depth"]
+
+    #         if gt_w is not None and gt_h is not None:
+    #             result.gt_dimensions_available = True
+    #             result.gt_width  = gt_w
+    #             result.gt_height = gt_h
+    #             result.gt_depth  = gt_d  # may still be None for some geometries
+
+    #             result.gt_can_grasp = (gt_w <= self.gripper_max_width and
+    #                                    gt_h <= self.gripper_max_height)
+    #             result.decision_correct = (can_grasp == result.gt_can_grasp)
+    #             result.width_error_m  = abs(est_w - gt_w)
+    #             result.height_error_m = abs(est_h - gt_h)
+    #         else:
+    #             result.gt_dimensions_available = False
+    #     else:
+    #         result.ground_truth_available = False
+    #         result.gt_dimensions_available = False
+
+    #     self._frames_evaluated += 1
+    #     return result"
 
     # ── Helpers ───────────────────────────────────────────────────────
     def _unpack_cloud(self, cloud_msg: PointCloud2) -> np.ndarray:
@@ -606,15 +831,114 @@ class GraspEstimator(Node):
         dist = np.linalg.norm(points - centroid, axis=1)
         return points[dist < self.cluster_radius]
 
-    def _estimate_dimensions(self, points: np.ndarray) -> Tuple[float, float, float]:
-        """5th-95th percentile bounding box extent — unchanged from original."""
+
+    def _estimate_dimensions(self, points: np.ndarray):
+        """Axis-aligned bounding box via 5th-95th percentile extent —
+        same approach as the original grasp_estimator.py, no PCA."""
         p5  = np.percentile(points, 5,  axis=0)
         p95 = np.percentile(points, 95, axis=0)
         extent = p95 - p5
-        width  = float(extent[0])    # left-right
-        height = float(extent[1])    # up-down
-        depth  = float(extent[2])    # into scene
+
+        width  = float(extent[0])   # x: left-right
+        height = float(extent[1])   # y: up-down
+        depth  = float(extent[2])   # z: forward
+
         return width, height, depth
+    # def _estimate_dimensions(self, vs, us, zs):
+    #     xs = (us - self.cx) * zs / self.fx
+    #     ys = (vs - self.cy) * zs / self.fy
+    #     pts3d = np.stack([xs, ys, zs], axis=1).astype(np.float64)
+
+    #     centroid = pts3d.mean(axis=0)
+    #     centered = pts3d - centroid
+    #     cov = np.cov(centered.T)
+    #     eigvals, eigvecs = np.linalg.eigh(cov)
+
+    #     u = centered @ eigvecs[:, 1]
+    #     v = centered @ eigvecs[:, 2]
+
+    #     # Robust extent: use a percentile spread instead of full min/max range,
+    #     # so a handful of edge/curvature-inflated points don't dominate the
+    #     # bounding box the way minAreaRect's convex hull does.
+    #     u_lo, u_hi = np.percentile(u, [5, 95])
+    #     v_lo, v_hi = np.percentile(v, [5, 95])
+    #     width = float(u_hi - u_lo)
+    #     height = float(v_hi - v_lo)
+
+    #     depth_out = float(zs.max() - zs.min())
+    #     # Detailed trace for obj_sphere: covariance, eigenstuff, projections
+    #     try:
+    #         if hasattr(self, 'object_name') and self.object_name == 'obj_sphere':
+    #             # counts (from estimate stage)
+    #             mask_pixels = getattr(self, '_trace_mask_pixels', None)
+    #             valid_pixels = getattr(self, '_trace_valid_pixels', None)
+    #             after_depth_filter = getattr(self, '_trace_after_depth_filter', None)
+    #             self.get_logger().info(f"TRACE COUNTS obj_sphere: mask_pixels={mask_pixels} valid_pixels={valid_pixels} after_depth_filter={after_depth_filter}")
+    #             self.get_logger().info(f"TRACE PCA obj_sphere: cov={cov.tolist()}")
+    #             self.get_logger().info(f"TRACE PCA obj_sphere: eigvals={eigvals.tolist()}")
+    #             # eigvecs is 3x3 - convert to nested lists
+    #             self.get_logger().info(f"TRACE PCA obj_sphere: eigvecs={eigvecs.tolist()}")
+    #             # projections stats
+    #             u_min, u_max = float(u.min()), float(u.max())
+    #             v_min, v_max = float(v.min()), float(v.max())
+    #             u5, u95 = float(u_lo), float(u_hi)
+    #             v5, v95 = float(v_lo), float(v_hi)
+    #             self.get_logger().info(
+    #                 f"TRACE PROJ obj_sphere: u_min={u_min:.9f} u_max={u_max:.9f} v_min={v_min:.9f} v_max={v_max:.9f}"
+    #             )
+    #             self.get_logger().info(
+    #                 f"TRACE PROJ obj_sphere: u_5={u5:.9f} u_95={u95:.9f} v_5={v5:.9f} v_95={v95:.9f}"
+    #             )
+    #             self.get_logger().info(
+    #                 f"TRACE DIM obj_sphere: full_span_u={u_max - u_min:.9f} full_span_v={v_max - v_min:.9f} percentile_span_u={u95 - u5:.9f} percentile_span_v={v95 - v5:.9f} depth_span={depth_out:.9f}"
+    #             )
+    #             # exact variables used for returned dimensions
+    #             self.get_logger().info(f"TRACE RETURN obj_sphere: width_calc={width:.9f} height_calc={height:.9f} depth_calc={depth_out:.9f}")
+    #     except Exception:
+    #         pass
+    #     # Temporary debug export for obj_sphere: save runtime arrays/stats
+    #     if hasattr(self, 'object_name') and self.object_name == 'obj_sphere':
+    #         try:
+    #             points = pts3d
+    #             np.save('debug_runtime_us.npy', us)
+    #             np.save('debug_runtime_vs.npy', vs)
+    #             np.save('debug_runtime_zs.npy', zs)
+    #             np.save('debug_runtime_points.npy', points)
+    #             np.save('debug_runtime_centered.npy', centered)
+    #             np.save('debug_runtime_cov.npy', cov)
+    #             np.save('debug_runtime_eigvals.npy', eigvals)
+    #             np.save('debug_runtime_eigvecs.npy', eigvecs)
+    #             np.save('debug_runtime_u.npy', u)
+    #             np.save('debug_runtime_v.npy', v)
+
+    #             # recompute simple depth stats here for completeness
+    #             median_z_rt = float(np.median(zs)) if len(zs) > 0 else None
+    #             mad_rt = float(np.median(np.abs(zs - median_z_rt))) if len(zs) > 0 else None
+    #             depth_gate_rt = (median_z_rt + max(6 * mad_rt, 0.03)) if median_z_rt is not None else None
+
+    #             stats = {
+    #                 'object_name': self.object_name,
+    #                 'mask_pixels': getattr(self, '_trace_mask_pixels', None),
+    #                 'valid_pixels': getattr(self, '_trace_valid_pixels', None),
+    #                 'after_depth_filter': getattr(self, '_trace_after_depth_filter', None),
+    #                 'median_depth': median_z_rt,
+    #                 'mad': mad_rt,
+    #                 'depth_gate': depth_gate_rt,
+    #                 'u_min': float(u.min()), 'u_max': float(u.max()),
+    #                 'v_min': float(v.min()), 'v_max': float(v.max()),
+    #                 'u_5': float(u_lo), 'u_95': float(u_hi),
+    #                 'v_5': float(v_lo), 'v_95': float(v_hi),
+    #                 'returned_width': float(width), 'returned_height': float(height), 'returned_depth': float(depth_out),
+    #             }
+    #             import json as _json
+    #             with open('debug_runtime_stats.json', 'w') as fh:
+    #                 _json.dump(stats, fh, indent=2)
+    #         except Exception as _e:
+    #             try:
+    #                 self.get_logger().error(f"Failed to write debug runtime files: {_e}")
+    #             except Exception:
+    #                 pass
+    #     return width, height, depth_out
 
     def _log_result(self, result: EstimationResult):
         if not result.object_detected:

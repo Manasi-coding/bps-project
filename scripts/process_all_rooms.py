@@ -6,12 +6,12 @@ import os
 
 WORLD_DIR = "worlds"
 WORLD_FILES = [
-    "world1_primitives.sdf",
-    "world2_household.sdf",
-    "world3_kitchen_objects.sdf",
-    "world4_office_objects.sdf",
-    "world5_mixed_clutter.sdf",
-    "world6_occlusion.sdf",
+    "world1_baseline.sdf",
+    "world2_dense_clutter.sdf",
+    "world3_thin_objects.sdf",
+    "world4_support_scene.sdf",
+    "world5_occlusion_scene.sdf",
+    "world6_dense_mixed.sdf",
 ]
 
 RGB_TOPIC = "/rgb_camera"

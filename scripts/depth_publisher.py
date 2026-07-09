@@ -3,20 +3,39 @@
 depth_publisher.py
 ------------------
 Reads the robot's RGB camera feed from Gazebo (bridged into ROS 2), runs your
-depth model using the exact same inference pipeline as your run.py script,
-and republishes the result as a ROS 2 sensor_msgs/msg/Image depth topic.
+depth model, and republishes the result as a ROS 2 sensor_msgs/msg/Image
+depth topic.
 
-Plug-and-play with your existing weights — set the `load_from` and `encoder`
-parameters (CLI or YAML).
+Supports two checkpoint families, selected via the `model_type` parameter:
+
+    model_type=relative (default)
+        Stock Depth Anything V2 relative-depth model, e.g.
+        checkpoints/depth_anything_v2_vits.pth
+        -> imports from models.depth_anything_v2.dpt
+        -> model.infer_image(image)   (single arg)
+
+    model_type=metric
+        Metric-depth fine-tuned model, e.g.
+        checkpoints/depth_anything_v2_metric_hypersim_vits_NewModified1.pth
+        -> imports from metric_depth.depth_anything_v2.dpt
+        -> model.infer_image(image, input_size)   (needs max_depth in ctor)
 
 Usage:
-    ros2 run <your_package> depth_publisher.py --ros-args \
-        -p load_from:=checkpoints/your_finetuned_weights.pth \
-        -p encoder:=vitl \
+    python3 scripts/depth_publisher.py --ros-args \
+        -p load_from:=checkpoints/depth_anything_v2_vits.pth \
+        -p encoder:=vits \
+        -p model_type:=relative
+
+    python3 scripts/depth_publisher.py --ros-args \
+        -p load_from:=checkpoints/depth_anything_v2_metric_hypersim_vits_NewModified1.pth \
+        -p encoder:=vits \
+        -p model_type:=metric \
         -p max_depth:=20.0
 """
 
 import os
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -29,8 +48,8 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
-# ── Your model — same import as run.py ───────────────────────────────────
-from metric_depth.depth_anything_v2.dpt import DepthAnythingV2
+# Make the project root importable, same as run_depth_anything.py / run_depth_all.py / load_model.py
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
 MODEL_CONFIGS = {
@@ -40,16 +59,6 @@ MODEL_CONFIGS = {
     'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]},
 }
 
-# MOD: replaced hand-rolled preprocessing (square resize, no ImageNet
-# normalization, NEAREST interpolation) with the model's own infer_image()
-# method — same call run.py uses. The hand-rolled version diverged from
-# dpt.py's actual preprocessing pipeline (missing normalization, wrong
-# resize/interpolation, no PrepareForNet formatting), causing a systematic
-# ~6x depth overestimate (observed mean=5.03m vs true ~0.75m camera-to-
-# object distance in world1_primitives).
-def infer_image_metric(model, raw_image, input_size, device):
-    depth = model.infer_image(raw_image, input_size)
-    return depth.astype(np.float32)
 
 class DepthPublisher(Node):
     def __init__(self):
@@ -61,15 +70,17 @@ class DepthPublisher(Node):
         self.declare_parameter('camera_info_topic', '/camera/rgb/camera_info')
         self.declare_parameter('load_from', '')
         self.declare_parameter('encoder', 'vitl')
-        self.declare_parameter('max_depth', 20.0)
+        self.declare_parameter('model_type', 'relative')  # 'relative' or 'metric'
+        self.declare_parameter('max_depth', 20.0)          # only used for model_type=metric
         self.declare_parameter('input_size', 518)
 
-        rgb_topic         = self.get_parameter('rgb_topic').get_parameter_value().string_value
-        depth_topic       = self.get_parameter('depth_topic').get_parameter_value().string_value
-        load_from         = self.get_parameter('load_from').get_parameter_value().string_value
-        encoder            = self.get_parameter('encoder').get_parameter_value().string_value
-        max_depth          = self.get_parameter('max_depth').get_parameter_value().double_value
-        input_size         = self.get_parameter('input_size').get_parameter_value().integer_value
+        rgb_topic     = self.get_parameter('rgb_topic').get_parameter_value().string_value
+        depth_topic   = self.get_parameter('depth_topic').get_parameter_value().string_value
+        load_from     = self.get_parameter('load_from').get_parameter_value().string_value
+        encoder       = self.get_parameter('encoder').get_parameter_value().string_value
+        model_type    = self.get_parameter('model_type').get_parameter_value().string_value
+        max_depth     = self.get_parameter('max_depth').get_parameter_value().double_value
+        input_size    = self.get_parameter('input_size').get_parameter_value().integer_value
 
         # ── Parameter validation ─────────────────────────────────────
         if not load_from:
@@ -85,16 +96,21 @@ class DepthPublisher(Node):
             raise ValueError(
                 f"Invalid encoder='{encoder}'. Must be one of {list(MODEL_CONFIGS.keys())}."
             )
-        if max_depth <= 0:
+        if model_type not in ('relative', 'metric'):
+            raise ValueError(
+                f"Invalid model_type='{model_type}'. Must be 'relative' or 'metric'."
+            )
+        if model_type == 'metric' and max_depth <= 0:
             raise ValueError(f"Invalid max_depth={max_depth}. Must be > 0.")
         if input_size <= 0:
             raise ValueError(f"Invalid input_size={input_size}. Must be > 0.")
 
+        self.model_type = model_type
         self.input_size = input_size
 
         self.bridge = CvBridge()
 
-        # ── Detect device — same logic as your run.py ────────────────────
+        # ── Detect device ──────────────────────────────────────────
         if torch.cuda.is_available():
             self.device = 'cuda'
         elif torch.backends.mps.is_available():
@@ -102,46 +118,53 @@ class DepthPublisher(Node):
         else:
             self.device = 'cpu'
         self.get_logger().info(f"Selected device: {self.device}")
+        self.get_logger().info(f"Model type: {model_type}")
 
-        # ── Load model — same logic as your run.py ───────────────────────
+        # ── Import the correct DepthAnythingV2 for this model_type ──
+        if model_type == 'metric':
+            # metric_depth lives outside bps-project, under Depth-Anything-V2/
+            metric_repo_root = os.path.expanduser('~/Depth-Anything-V2')
+            if metric_repo_root not in sys.path:
+                sys.path.append(metric_repo_root)
+            from metric_depth.depth_anything_v2.dpt import DepthAnythingV2
+        else:
+            from models.depth_anything_v2.dpt import DepthAnythingV2
+
+        # ── Load model ────────────────────────────────────────────
         self.get_logger().info(f"Loading checkpoint from: {load_from}")
 
         state_dict = torch.load(load_from, map_location='cpu')
 
-        # Handle 'module.' prefix from DataParallel training — same as run.py
+        # Handle 'module.' prefix from DataParallel training
         if any(k.startswith('module.') for k in state_dict.keys()):
             self.get_logger().info("Stripping 'module.' prefix from state dict...")
             state_dict = {k.replace('module.', ''): v
                           for k, v in state_dict.items()}
 
-        self.model = DepthAnythingV2(
-            **{**MODEL_CONFIGS[encoder], 'max_depth': max_depth}
-        )
+        if model_type == 'metric':
+            self.model = DepthAnythingV2(
+                **{**MODEL_CONFIGS[encoder], 'max_depth': max_depth}
+            )
+        else:
+            self.model = DepthAnythingV2(**MODEL_CONFIGS[encoder])
+
         self.model.load_state_dict(state_dict, strict=False)
         self.model = self.model.to(self.device).eval()
-        self.get_logger().info(
-            f"Model loaded. Encoder: {encoder}  Max depth: {max_depth:.1f}m  "
-            f"Input size: {input_size}"
-        )
 
-        self.model = self.model.to(self.device).eval()
-        self.get_logger().info(
-            f"Model loaded. Encoder: {encoder}  Max depth: {max_depth:.1f}m  "
-            f"Input size: {input_size}"
-        )
+        if model_type == 'metric':
+            self.get_logger().info(
+                f"Model loaded. Encoder: {encoder}  Max depth: {max_depth:.1f}m  "
+                f"Input size: {input_size}"
+            )
+        else:
+            self.get_logger().info(f"Model loaded. Encoder: {encoder}")
 
-        # MOD: the first CPU inference call through a freshly-loaded model
-        # is dramatically slower than subsequent calls (kernel selection,
-        # memory allocation, no warm operator cache) — observed ~25-28s for
-        # a first frame vs ~3-5s steady-state. Run one dummy inference pass
-        # here, before subscribing to RGB or declaring ready, so this cost
-        # is absorbed at startup instead of silently eating into the first
-        # object's pointcloud-wait timeout during an actual experiment run.
+        # ── Warm-up pass (absorbs slow first-inference cost at startup) ──
         self.get_logger().info("Warming up model with dummy inference pass...")
         dummy_image = np.zeros((480, 640, 3), dtype=np.uint8)
-        _ = infer_image_metric(self.model, dummy_image, input_size, self.device)
+        _ = self._infer(dummy_image)
         self.get_logger().info("Model warm-up complete.")
-        
+
         # ── ROS 2 QoS suitable for camera topics ──────────────────────
         camera_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -160,6 +183,14 @@ class DepthPublisher(Node):
         self.get_logger().info(f"Publishing depth on: {depth_topic}")
         self.get_logger().info("depth_publisher ready.")
 
+    def _infer(self, bgr_image):
+        """Run inference with the correct call signature for this model_type."""
+        if self.model_type == 'metric':
+            depth = self.model.infer_image(bgr_image, self.input_size)
+        else:
+            depth = self.model.infer_image(bgr_image)
+        return depth.astype(np.float32)
+
     def _rgb_callback(self, msg: Image):
         print("CALLBACK FIRED", flush=True)
         """Called on every RGB frame from Gazebo (via ros_gz bridge)."""
@@ -170,19 +201,17 @@ class DepthPublisher(Node):
                 )
                 return
 
-            # ROS Image → OpenCV BGR  (same format your run.py uses)
+            # ROS Image → OpenCV BGR
             bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             print("STEP: cv2 conversion done", flush=True)
             print("STEP: converted to cv2", flush=True)
 
-            # Run inference — identical to your run.py
+            # Run inference
             print("STEP: starting inference", flush=True)
-            depth = infer_image_metric(
-                self.model, bgr, self.input_size, self.device
-            )
+            depth = self._infer(bgr)
             print("STEP: inference done", flush=True)
 
-            # Sanity check (mirrors your run.py print statements)
+            # Sanity check
             if np.isnan(depth).any() or np.isinf(depth).any():
                 self.get_logger().warning(
                     "Depth contains NaN/Inf — skipping frame"

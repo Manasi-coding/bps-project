@@ -1,63 +1,115 @@
 Boundary Independence Check — Baseline Setup
 ==================================================
 
-Scene: world1_primitives
+Scene: world1_baseline
   Depth map shape: (480, 640)
-  Objects found: ['bottle', 'pen', 'ruler', 'usb']
-    bottle: boundary pixels = 495
-    pen: boundary pixels = 303
-    ruler: boundary pixels = 374
-    usb: boundary pixels = 396
+  Objects found: ['obj_apple', 'obj_banana', 'obj_bottle', 'obj_bowl', 'obj_cereal_box', 'obj_mug', 'obj_notebook', 'obj_plate', 'obj_remote', 'obj_spoon', 'obj_tissue_box', 'obj_toy_block']
+    obj_apple: boundary pixels = 294
+    obj_banana: boundary pixels = 429
+    obj_bottle: boundary pixels = 228
+    obj_bowl: boundary pixels = 433
+    obj_cereal_box: boundary pixels = 702
+    obj_mug: boundary pixels = 446
+    obj_notebook: boundary pixels = 1377
+    obj_plate: boundary pixels = 452
+    obj_remote: boundary pixels = 524
+    obj_spoon: boundary pixels = 409
+    obj_tissue_box: boundary pixels = 620
+    obj_toy_block: boundary pixels = 287
 
-Scene: world2_household
+Scene: world2_dense_clutter
   Depth map shape: (480, 640)
-  Objects found: ['apple', 'coffee_mug', 'remote_control', 'smartphone']
-    apple: boundary pixels = 303
-    coffee_mug: boundary pixels = 413
-    remote_control: boundary pixels = 604
-    smartphone: boundary pixels = 587
+  Objects found: ['obj_apple', 'obj_banana', 'obj_bowl', 'obj_cereal_box', 'obj_chopping_board', 'obj_cup', 'obj_fork', 'obj_kettle', 'obj_knife', 'obj_mug', 'obj_plate', 'obj_tissue_box', 'obj_tomato']
+    obj_apple: boundary pixels = 292
+    obj_banana: boundary pixels = 543
+    obj_bowl: boundary pixels = 433
+    obj_cereal_box: boundary pixels = 665
+    obj_chopping_board: boundary pixels = 1285
+    obj_cup: boundary pixels = 332
+    obj_fork: boundary pixels = 420
+    obj_kettle: boundary pixels = 294
+    obj_knife: boundary pixels = 439
+    obj_mug: boundary pixels = 57
+    obj_plate: boundary pixels = 288
+    obj_tissue_box: boundary pixels = 602
+    obj_tomato: boundary pixels = 247
 
-Scene: world3_kitchen_objects
+Scene: world3_thin_objects
   Depth map shape: (480, 640)
-  Objects found: ['bottle', 'bowl', 'mug', 'spoon']
-    bottle: boundary pixels = 388
-    bowl: boundary pixels = 530
-    mug: boundary pixels = 164
-    spoon: boundary pixels = 336
+  Objects found: ['obj_bottle', 'obj_cable', 'obj_chopstick_a', 'obj_chopstick_b', 'obj_fork', 'obj_knife', 'obj_mug', 'obj_notebook', 'obj_pen', 'obj_pencil', 'obj_plate', 'obj_ruler', 'obj_spoon', 'obj_straw', 'obj_toothbrush']
+    obj_bottle: boundary pixels = 366
+    obj_cable: boundary pixels = 547
+    obj_chopstick_a: boundary pixels = 212
+    obj_chopstick_b: boundary pixels = 139
+    obj_fork: boundary pixels = 516
+    obj_knife: boundary pixels = 566
+    obj_mug: boundary pixels = 467
+    obj_notebook: boundary pixels = 1345
+    obj_pen: boundary pixels = 405
+    obj_pencil: boundary pixels = 445
+    obj_plate: boundary pixels = 896
+    obj_ruler: boundary pixels = 837
+    obj_spoon: boundary pixels = 553
+    obj_straw: boundary pixels = 202
+    obj_toothbrush: boundary pixels = 475
 
-Scene: world4_office_objects
+Scene: world4_support_scene
   Depth map shape: (480, 640)
-  Objects found: ['calculator', 'mouse', 'stapler', 'usb_drive']
-    calculator: boundary pixels = 464
-    mouse: boundary pixels = 407
-    stapler: boundary pixels = 385
-    usb_drive: boundary pixels = 135
+  Objects found: ['obj_book', 'obj_bowl', 'obj_cereal_box', 'obj_container', 'obj_glass_jar', 'obj_mug', 'obj_notebook', 'obj_plate', 'obj_sponge', 'obj_storage_box', 'obj_tissue_box', 'obj_toy_cube', 'obj_wooden_crate']
+    obj_book: boundary pixels = 1363
+    obj_bowl: boundary pixels = 629
+    obj_cereal_box: boundary pixels = 1198
+    obj_container: boundary pixels = 1298
+    obj_glass_jar: boundary pixels = 538
+    obj_mug: boundary pixels = 397
+    obj_notebook: boundary pixels = 1250
+    obj_plate: boundary pixels = 1552
+    obj_sponge: boundary pixels = 469
+    obj_storage_box: boundary pixels = 479
+    obj_tissue_box: boundary pixels = 436
+    obj_toy_cube: boundary pixels = 280
+    obj_wooden_crate: boundary pixels = 353
 
-Scene: world5_mixed_clutter
+Scene: world5_occlusion_scene
   Depth map shape: (480, 640)
-  Objects found: ['book', 'bottle', 'bowl', 'calculator', 'mug', 'small_box', 'usb_drive']
-    book: boundary pixels = 928
-    bottle: boundary pixels = 530
-    bowl: boundary pixels = 747
-    calculator: boundary pixels = 640
-    mug: boundary pixels = 334
-    small_box: boundary pixels = 549
-    usb_drive: boundary pixels = 44
+  Objects found: ['obj_apple', 'obj_banana', 'obj_book', 'obj_bottle', 'obj_bowl', 'obj_can', 'obj_cereal_box', 'obj_container', 'obj_cup', 'obj_mug', 'obj_notebook', 'obj_plate', 'obj_sponge', 'obj_tissue_box', 'obj_toy']
+    obj_apple: boundary pixels = 334
+    obj_banana: boundary pixels = 523
+    obj_book: boundary pixels = 536
+    obj_bottle: boundary pixels = 169
+    obj_bowl: boundary pixels = 924
+    obj_can: boundary pixels = 388
+    obj_cereal_box: boundary pixels = 1121
+    obj_container: boundary pixels = 876
+    obj_cup: boundary pixels = 380
+    obj_mug: boundary pixels = 387
+    obj_notebook: boundary pixels = 576
+    obj_plate: boundary pixels = 893
+    obj_sponge: boundary pixels = 391
+    obj_tissue_box: boundary pixels = 642
+    obj_toy: boundary pixels = 321
 
-Scene: world6_occlusion
+Scene: world6_dense_mixed
   Depth map shape: (480, 640)
-  Objects found: ['coffee_cup', 'laptop', 'notebook', 'smartphone', 'sunglasses', 'tape_dispenser', 'water_bottle']
-    coffee_cup: boundary pixels = 438
-    laptop: boundary pixels = 1371
-    notebook: boundary pixels = 1276
-    smartphone: boundary pixels = 456
-    sunglasses: boundary pixels = 749
-    tape_dispenser: boundary pixels = 513
-    water_bottle: boundary pixels = 468
+  Objects found: ['obj_apple', 'obj_banana', 'obj_bowl', 'obj_cereal_box', 'obj_fork', 'obj_knife', 'obj_mug', 'obj_notebook', 'obj_pen', 'obj_plate', 'obj_remote', 'obj_ruler', 'obj_spoon', 'obj_tissue_box']
+    obj_apple: boundary pixels = 296
+    obj_banana: boundary pixels = 564
+    obj_bowl: boundary pixels = 607
+    obj_cereal_box: boundary pixels = 866
+    obj_fork: boundary pixels = 249
+    obj_knife: boundary pixels = 278
+    obj_mug: boundary pixels = 3
+    obj_notebook: boundary pixels = 990
+    obj_pen: boundary pixels = 369
+    obj_plate: boundary pixels = 1113
+    obj_remote: boundary pixels = 354
+    obj_ruler: boundary pixels = 954
+    obj_spoon: boundary pixels = 358
+    obj_tissue_box: boundary pixels = 944
 
 ==================================================
 Scenes processed: 6
-Objects loaded successfully: 30
+Objects loaded successfully: 82
 
 Metric computation (boundary_iou, interior_rmse) was skipped:
 no second depth/mask source (e.g. corrupted depth maps) exists yet to compare against.
