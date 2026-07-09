@@ -1,0 +1,33 @@
+Boundary Mask Verification
+==========================
+
+Scene: world1_baseline
+Boundary pixels : 6201
+Boundary ratio  : 2.019%
+Visual verdict  : __________
+
+Scene: world2_dense_clutter
+Boundary pixels : 5897
+Boundary ratio  : 1.920%
+Visual verdict  : __________
+
+Scene: world3_thin_objects
+Boundary pixels : 7971
+Boundary ratio  : 2.595%
+Visual verdict  : __________
+
+Scene: world4_support_scene
+Boundary pixels : 10242
+Boundary ratio  : 3.334%
+Visual verdict  : __________
+
+Scene: world5_occlusion_scene
+Boundary pixels : 8461
+Boundary ratio  : 2.754%
+Visual verdict  : __________
+
+Scene: world6_dense_mixed
+Boundary pixels : 7945
+Boundary ratio  : 2.586%
+Visual verdict  : __________
+

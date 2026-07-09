@@ -1,0 +1,6 @@
+depth_maps/
+rgb_images/
+boundary_masks/
+ground_truth/
+__pycache__/
+*.pyc
