@@ -1,6 +1,10 @@
-depth_maps/
-rgb_images/
-boundary_masks/
-ground_truth/
 __pycache__/
 *.pyc
+
+audits/
+debug/
+
+worlds_basic/
+worlds_old/
+
+pointcloud_export.xyz
