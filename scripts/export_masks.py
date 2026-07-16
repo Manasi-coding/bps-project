@@ -122,6 +122,27 @@ SCENE_LABELS = {
 RING_WIDTH = 5
 TIMEOUT = 20
 
+
+def write_masks_for_labels(label_ch, labels, out_dir, scene_name):
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (RING_WIDTH, RING_WIDTH))
+    written = []
+    for label_id, name in labels.items():
+        mask = (label_ch == label_id).astype(np.uint8)
+        eroded = cv2.erode(mask, kernel)
+        ring = mask - eroded
+        cv2.imwrite(str(out_dir / f'{name}_mask.png'), mask * 255)
+        cv2.imwrite(str(out_dir / f'{name}_boundary.png'), ring * 255)
+        np.save(out_dir / f'{name}_mask.npy', mask)
+        np.save(out_dir / f'{name}_boundary.npy', ring)
+        pixel_count = np.count_nonzero(mask)
+        if pixel_count == 0:
+            print(f"[{scene_name}]   ! {name}: no pixels in semantic frame; wrote empty mask")
+        else:
+            print(f"[{scene_name}]   ✓ {name}: mask={pixel_count}px  ring={np.count_nonzero(ring)}px")
+        written.append(name)
+    return written
+
+
 scene = sys.argv[1]
 if scene not in SCENE_LABELS:
     print(f"ERROR: No label mapping defined for {scene}")
@@ -170,20 +191,7 @@ print(f"[{scene}] Frame t={ts}s  shape={frame.shape}  channels={channels}")
 label_ch = frame[:, :, 0]
 print(f"[{scene}] Unique label values: {np.unique(label_ch)}")
 
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (RING_WIDTH, RING_WIDTH))
-found = []
-for label_id, name in LABELS.items():
-    mask = (label_ch == label_id).astype(np.uint8)
-    if np.count_nonzero(mask) == 0:
-        continue
-    eroded = cv2.erode(mask, kernel)
-    ring = mask - eroded
-    cv2.imwrite(str(out_dir / f'{name}_mask.png'),     mask * 255)
-    cv2.imwrite(str(out_dir / f'{name}_boundary.png'), ring * 255)
-    np.save(out_dir / f'{name}_mask.npy',     mask)
-    np.save(out_dir / f'{name}_boundary.npy', ring)
-    print(f"[{scene}]   ✓ {name}: mask={np.count_nonzero(mask)}px  ring={np.count_nonzero(ring)}px")
-    found.append(name)
+found = write_masks_for_labels(label_ch, LABELS, out_dir, scene)
 
 if not found:
     print(f"ERROR [{scene}]: No labeled objects found — check label plugin in SDF")

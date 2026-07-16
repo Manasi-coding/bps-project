@@ -259,11 +259,31 @@ class ResultsLogger:
 
             # Run N trials for this object
             for trial in range(1, self.n_trials + 1):
-                # Spin to allow the estimator's subscription callback to
-                # receive a fresh cloud before each estimate() call.
-                # Without this, estimate() burns through the single buffered
-                # cloud and all remaining trials are skipped as stale.
-                rclpy.spin_once(estimator, timeout_sec=0.5)
+                # MOD: spinning for a fixed 0.5s and then calling estimate()
+                # regardless meant most trials fired before depth_publisher.py
+                # (which on CPU only produces a new frame every ~3-10s, per
+                # `ros2 topic hz /depth_model/pointcloud`) had actually
+                # published anything new — estimate() would then see a stale
+                # frame and return None, and the trial was logged as
+                # "object not detected" even though nothing was wrong with
+                # detection itself. Instead, explicitly wait until a new
+                # depth frame has actually arrived (via _frames_received,
+                # incremented in _depth_callback) before calling estimate(),
+                # bounded by a generous timeout so a genuinely stalled
+                # depth_publisher still surfaces as a real failure rather
+                # than hanging forever.
+                frames_before = estimator._frames_received
+                frame_deadline = estimator.get_clock().now().nanoseconds + int(15.0 * 1e9)
+                while estimator._frames_received <= frames_before:
+                    rclpy.spin_once(estimator, timeout_sec=0.5)
+                    if estimator.get_clock().now().nanoseconds > frame_deadline:
+                        log.warning(
+                            f"Trial {trial}/{self.n_trials}: no new depth "
+                            f"frame arrived within 15s — proceeding with "
+                            f"whatever is latest."
+                        )
+                        break
+
                 result = estimator.estimate()
 
                 if result is not None:
