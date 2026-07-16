@@ -1,0 +1,7 @@
+world,camera_transform_ok,rows
+world1_baseline,True,4
+world2_dense_clutter,True,5
+world3_thin_objects,True,7
+world4_support_scene,True,8
+world5_occlusion_scene,True,14
+world6_dense_mixed,True,10
