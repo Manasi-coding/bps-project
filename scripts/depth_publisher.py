@@ -96,9 +96,9 @@ class DepthPublisher(Node):
             raise ValueError(
                 f"Invalid encoder='{encoder}'. Must be one of {list(MODEL_CONFIGS.keys())}."
             )
-        if model_type not in ('relative', 'metric'):
+        if model_type not in ('relative', 'metric', 'midas'):
             raise ValueError(
-                f"Invalid model_type='{model_type}'. Must be 'relative' or 'metric'."
+                f"Invalid model_type='{model_type}'. Must be 'relative', 'metric', or 'midas'."
             )
         if model_type == 'metric' and max_depth <= 0:
             raise ValueError(f"Invalid max_depth={max_depth}. Must be > 0.")
@@ -120,15 +120,16 @@ class DepthPublisher(Node):
         self.get_logger().info(f"Selected device: {self.device}")
         self.get_logger().info(f"Model type: {model_type}")
 
-        # ── Import the correct DepthAnythingV2 for this model_type ──
+        # ── Import the correct model class for this model_type ──
         if model_type == 'metric':
             # metric_depth lives outside bps-project, under Depth-Anything-V2/
             metric_repo_root = os.path.expanduser('~/Depth-Anything-V2')
             if metric_repo_root not in sys.path:
                 sys.path.append(metric_repo_root)
             from metric_depth.depth_anything_v2.dpt import DepthAnythingV2
-        else:
+        elif model_type == 'relative':
             from models.depth_anything_v2.dpt import DepthAnythingV2
+        # midas: no import needed here, handled via torch.hub below
 
         # ── Load model ────────────────────────────────────────────
         self.get_logger().info(f"Loading checkpoint from: {load_from}")
@@ -145,10 +146,16 @@ class DepthPublisher(Node):
             self.model = DepthAnythingV2(
                 **{**MODEL_CONFIGS[encoder], 'max_depth': max_depth}
             )
-        else:
+            self.model.load_state_dict(state_dict, strict=False)
+        elif model_type == 'relative':
             self.model = DepthAnythingV2(**MODEL_CONFIGS[encoder])
+            self.model.load_state_dict(state_dict, strict=False)
+        else:  # midas
+            self.model = torch.hub.load('intel-isl/MiDaS', 'MiDaS_small')
+            self.model.load_state_dict(state_dict, strict=False)
+            midas_transforms = torch.hub.load('intel-isl/MiDaS', 'transforms')
+            self.midas_transform = midas_transforms.small_transform
 
-        self.model.load_state_dict(state_dict, strict=False)
         self.model = self.model.to(self.device).eval()
 
         if model_type == 'metric':
@@ -185,7 +192,19 @@ class DepthPublisher(Node):
 
     def _infer(self, bgr_image):
         """Run inference with the correct call signature for this model_type."""
-        if self.model_type == 'metric':
+        if self.model_type == 'midas':
+            img = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
+            input_batch = self.midas_transform(img).to(self.device)
+            with torch.no_grad():
+                pred = self.model(input_batch)
+                pred = torch.nn.functional.interpolate(
+                    pred.unsqueeze(1),
+                    size=bgr_image.shape[:2],
+                    mode="bicubic",
+                    align_corners=False,
+                ).squeeze()
+            depth = pred.cpu().numpy()
+        elif self.model_type == 'metric':
             depth = self.model.infer_image(bgr_image, self.input_size)
         else:
             depth = self.model.infer_image(bgr_image)
