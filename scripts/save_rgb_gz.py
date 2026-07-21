@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 import numpy as np
@@ -8,7 +9,24 @@ from pathlib import Path
 
 Path('rgb_images').mkdir(exist_ok=True)
 
+
+def infer_viewpoint(scene):
+    """Scene names follow '{world_id}__v{N}' for N>=2, unprefixed for viewpoint 1."""
+    m = re.search(r'__v(\d+)$', scene)
+    return int(m.group(1)) if m else 1
+
+
 scene_name = sys.argv[1] if len(sys.argv) > 1 else "scene"
+# Optional 2nd CLI arg overrides the topic explicitly. If omitted, the topic
+# is derived from the scene name using the naming convention from Part 1:
+#   viewpoint 1        -> /rgb_camera
+#   viewpoint N (N>=2)  -> /rgb_camera_v{N}
+if len(sys.argv) > 2:
+    RGB_TOPIC = sys.argv[2]
+else:
+    viewpoint = infer_viewpoint(scene_name)
+    RGB_TOPIC = '/rgb_camera' if viewpoint == 1 else f'/rgb_camera_v{viewpoint}'
+
 TIMEOUT = 60
 
 saved = False
@@ -26,13 +44,13 @@ def callback(msg):
     saved = True
 
 node = Node()
-node.subscribe(Image, '/rgb_camera', callback)
+node.subscribe(Image, RGB_TOPIC, callback)
 
-print(f"[{scene_name}] Waiting for RGB frame on /rgb_camera (timeout {TIMEOUT}s)...")
+print(f"[{scene_name}] Waiting for RGB frame on {RGB_TOPIC} (timeout {TIMEOUT}s)...")
 start = time.time()
 while not saved and time.time() - start < TIMEOUT:
     time.sleep(0.1)
 
 if not saved:
-    print(f"ERROR [{scene_name}]: No RGB messages received on /rgb_camera within {TIMEOUT} seconds")
+    print(f"ERROR [{scene_name}]: No RGB messages received on {RGB_TOPIC} within {TIMEOUT} seconds")
     sys.exit(1)

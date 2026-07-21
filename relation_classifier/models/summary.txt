@@ -1,0 +1,55 @@
+Data source: data/training_data_v3_metric_only.csv
+Train pairs: 47, Test pairs: 21, Overlap: 0
+Train rows: 125, Test rows: 64
+
+=== Logistic Regression ===
+              precision    recall  f1-score   support
+
+    Separate      0.737     0.483     0.583        29
+     Contact      0.667     0.857     0.750        35
+
+    accuracy                          0.688        64
+   macro avg      0.702     0.670     0.667        64
+weighted avg      0.698     0.688     0.674        64
+
+Feature importance for Logistic Regression (sorted by magnitude):
+  boundary_sharpness           -1.1077
+  relative_height              -0.8461
+  overlap_ratio                 0.6129
+  occlusion_boundary_score     -0.2290
+  surface_normal_consistency    0.2183
+  edge_continuity               0.2145
+  depth_gradient                0.0990
+  minimum_boundary_distance     0.0950
+=== Decision Tree ===
+              precision    recall  f1-score   support
+
+    Separate      0.714     0.517     0.600        29
+     Contact      0.674     0.829     0.744        35
+
+    accuracy                          0.688        64
+   macro avg      0.694     0.673     0.672        64
+weighted avg      0.692     0.688     0.679        64
+
+Feature importance for Decision Tree (sorted by magnitude):
+  boundary_sharpness            0.4626
+  relative_height               0.2183
+  overlap_ratio                 0.1251
+  edge_continuity               0.0676
+  depth_gradient                0.0584
+  minimum_boundary_distance     0.0353
+  surface_normal_consistency    0.0327
+  occlusion_boundary_score      0.0000
+=== Heuristic Baseline (rule-based) ===
+              precision    recall  f1-score   support
+
+    Separate      0.737     0.483     0.583        29
+     Contact      0.667     0.857     0.750        35
+
+    accuracy                          0.688        64
+   macro avg      0.702     0.670     0.667        64
+weighted avg      0.698     0.688     0.674        64
+
+=== Group-aware 5-fold Cross-Validation (F1) ===
+Logistic: mean=0.803, std=0.096, folds=[0.667 0.889 0.735 0.926 0.8  ]
+Tree: mean=0.699, std=0.239, folds=[0.222 0.846 0.826 0.8   0.8  ]

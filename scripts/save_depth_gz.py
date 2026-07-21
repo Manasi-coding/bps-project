@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 import numpy as np
@@ -7,7 +8,24 @@ from pathlib import Path
 
 Path('depth_maps').mkdir(exist_ok=True)
 
+
+def infer_viewpoint(scene):
+    """Scene names follow '{world_id}__v{N}' for N>=2, unprefixed for viewpoint 1."""
+    m = re.search(r'__v(\d+)$', scene)
+    return int(m.group(1)) if m else 1
+
+
 scene_name = sys.argv[1] if len(sys.argv) > 1 else "scene"
+# Optional 2nd CLI arg overrides the topic explicitly. If omitted, the topic
+# is derived from the scene name using the naming convention from Part 1:
+#   viewpoint 1        -> /depth_camera
+#   viewpoint N (N>=2)  -> /depth_camera_v{N}
+if len(sys.argv) > 2:
+    DEPTH_TOPIC = sys.argv[2]
+else:
+    viewpoint = infer_viewpoint(scene_name)
+    DEPTH_TOPIC = '/depth_camera' if viewpoint == 1 else f'/depth_camera_v{viewpoint}'
+
 TIMEOUT = 60
 
 saved = False
@@ -37,15 +55,15 @@ def callback(msg):
     valid_data = True
 
 node = Node()
-node.subscribe(Image, '/depth_camera', callback)
+node.subscribe(Image, DEPTH_TOPIC, callback)
 
-print(f"[{scene_name}] Waiting for depth frame on /depth_camera (timeout {TIMEOUT}s)...")
+print(f"[{scene_name}] Waiting for depth frame on {DEPTH_TOPIC} (timeout {TIMEOUT}s)...")
 start = time.time()
 while not saved and time.time() - start < TIMEOUT:
     time.sleep(0.1)
 
 if not saved:
-    print(f"ERROR [{scene_name}]: No depth messages received on /depth_camera within {TIMEOUT} seconds")
+    print(f"ERROR [{scene_name}]: No depth messages received on {DEPTH_TOPIC} within {TIMEOUT} seconds")
     print(f"[{scene_name}] Check Gazebo is running and not paused")
     sys.exit(1)
 

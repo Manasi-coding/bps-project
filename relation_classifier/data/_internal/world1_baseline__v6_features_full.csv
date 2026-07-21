@@ -1,0 +1,5 @@
+world_id,scene_id,object_id_a,object_id_b,_object_name_a,_object_name_b,boundary_sharpness,minimum_boundary_distance,minimum_boundary_distance_is_metric,surface_normal_consistency,relative_height,depth_gradient,overlap_ratio,edge_continuity,occlusion_boundary_score,ground_truth_relation
+world1_baseline,world1_baseline__v6,1,2,obj_bottle,obj_mug,,0.0021098465784643913,True,0.899641604662768,0.08200896173894012,,0.035255889520714866,1.0,0.4458715596330276,Separate
+world1_baseline,world1_baseline__v6,3,4,obj_bowl,obj_apple,0.14825615286827087,0.0029537851595474855,True,0.9969054880495309,0.015335403273941672,0.035498663783073425,0.037590361445783135,1.0,0.30747922437673125,Contact
+world1_baseline,world1_baseline__v6,8,12,obj_cereal_box,obj_banana,0.312740683555603,0.0021098465784643913,True,0.7162735953711438,0.16111063310175,0.04777994379401207,0.0408182459440395,1.0,0.28416485900216926,Contact
+world1_baseline,world1_baseline__v6,9,10,obj_notebook,obj_remote,0.04414883255958557,0.0021098465784643913,True,0.994554934226459,-0.006742756839127062,0.01225272100418806,0.35530621785881256,1.0,0.08871989860583018,Support

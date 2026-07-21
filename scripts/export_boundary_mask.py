@@ -1,7 +1,15 @@
+import re
 import sys
 import numpy as np
 import cv2
 from pathlib import Path
+
+
+def base_world_id(s):
+    """Strip the '__v{N}' viewpoint suffix (added in Part 1/2 for multiview
+    scenes) to get the underlying world id used as the SCENE_LABELS key.
+    Object labels don't change between viewpoints of the same world."""
+    return re.sub(r'__v\d+$', '', s)
 
 SCENE_LABELS = {
     "world1_baseline": {
@@ -44,7 +52,16 @@ RING_WIDTH = 5  # must match export_masks.py for consistent boundary semantics; 
 
 scene_name = sys.argv[1] if len(sys.argv) > 1 else "scene"
 
-LABELS = SCENE_LABELS[scene_name]
+# scene_name may be viewpoint-qualified (e.g. "world1_baseline__v3"); the
+# label map is keyed by the base world id since it's viewpoint-independent.
+# All directory paths below still use the full scene_name, since that's how
+# export_masks.py / save_rgb_gz.py named their per-viewpoint output.
+world_id = base_world_id(scene_name)
+if world_id not in SCENE_LABELS:
+    print(f"ERROR [{scene_name}]: No label mapping defined for {world_id} (derived from scene '{scene_name}')")
+    sys.exit(1)
+
+LABELS = SCENE_LABELS[world_id]
 
 masks_dir = Path('data/masks') / scene_name
 rgb_path = Path('rgb_images') / f'{scene_name}_rgb.png'

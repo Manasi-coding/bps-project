@@ -1,0 +1,6 @@
+world_id,scene_id,object_id_a,object_id_b,_object_name_a,_object_name_b,boundary_sharpness,minimum_boundary_distance,minimum_boundary_distance_is_metric,surface_normal_consistency,relative_height,depth_gradient,overlap_ratio,edge_continuity,occlusion_boundary_score,ground_truth_relation
+world1_baseline,world1_baseline__v3,3,4,obj_bowl,obj_apple,,0.003270368964189451,True,0.9937920132307579,0.020314451329209282,,0.0,1.0,0.8263888888888888,Contact
+world1_baseline,world1_baseline__v3,3,7,obj_bowl,obj_tissue_box,,0.003270368964189451,True,0.9844966093957893,-0.008418046693170922,,0.02056471356291823,1.0,0.8164556962025317,Separate
+world1_baseline,world1_baseline__v3,5,8,obj_spoon,obj_cereal_box,,0.003270368964189451,True,0.5634551489367291,-0.16420435394636124,,0.002008032128514056,1.0,1.0,Separate
+world1_baseline,world1_baseline__v3,8,12,obj_cereal_box,obj_banana,,0.003270368964189451,True,0.6005475712078021,0.11086032949192826,,0.04178736187104388,1.0,0.6106719367588933,Contact
+world1_baseline,world1_baseline__v3,9,10,obj_notebook,obj_remote,0.04453228414058685,0.003270368964189451,True,0.9906475159258725,-0.004674100216466748,0.01987594924867153,0.31222707423580787,1.0,0.16079436258808455,Support

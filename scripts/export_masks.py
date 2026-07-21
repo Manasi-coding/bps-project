@@ -143,13 +143,42 @@ def write_masks_for_labels(label_ch, labels, out_dir, scene_name):
     return written
 
 
+import re
+
+
+def infer_viewpoint(s):
+    """Scene names follow '{world_id}__v{N}' for N>=2, unprefixed for viewpoint 1."""
+    m = re.search(r'__v(\d+)$', s)
+    return int(m.group(1)) if m else 1
+
+
+def base_world_id(s):
+    """Strip the '__v{N}' viewpoint suffix to get the underlying world id
+    used as the SCENE_LABELS key (object labels are viewpoint-independent)."""
+    return re.sub(r'__v\d+$', '', s)
+
+
 scene = sys.argv[1]
-if scene not in SCENE_LABELS:
-    print(f"ERROR: No label mapping defined for {scene}")
+world_id = base_world_id(scene)
+viewpoint = infer_viewpoint(scene)
+
+if world_id not in SCENE_LABELS:
+    print(f"ERROR: No label mapping defined for {world_id} (derived from scene '{scene}')")
     sys.exit(1)
 
-LABELS = SCENE_LABELS[scene]
+LABELS = SCENE_LABELS[world_id]
 
+# Optional 2nd CLI arg overrides the topic explicitly. If omitted, the topic
+# is derived from the scene name using the naming convention from Part 1:
+#   viewpoint 1        -> /semantic_camera/labels_map
+#   viewpoint N (N>=2)  -> /semantic_camera_v{N}/labels_map
+if len(sys.argv) > 2:
+    SEMANTIC_TOPIC = sys.argv[2]
+else:
+    SEMANTIC_TOPIC = '/semantic_camera/labels_map' if viewpoint == 1 else f'/semantic_camera_v{viewpoint}/labels_map'
+
+# Masks are written under the full (viewpoint-qualified) scene name so that
+# different viewpoints of the same world don't clobber each other.
 out_dir = Path('data/masks') / scene
 out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -168,9 +197,9 @@ def cb(msg):
     except Exception as e:
         print(f"[{scene}] WARNING: failed to parse semantic frame: {e}")
 
-node.subscribe(Image, '/semantic_camera/labels_map', cb)
+node.subscribe(Image, SEMANTIC_TOPIC, cb)
 
-print(f"[{scene}] Waiting for semantic frame on /semantic_camera/labels_map (timeout {TIMEOUT}s)...")
+print(f"[{scene}] Waiting for semantic frame on {SEMANTIC_TOPIC} (timeout {TIMEOUT}s)...")
 start = time.time()
 while not received and time.time() - start < TIMEOUT:
     time.sleep(0.1)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 Path('ground_truth').mkdir(exist_ok=True)
 
-WORLD_DIR = Path('worlds')
+WORLD_DIR = Path('worlds_dynamic_with_contact_sensors')
 VALID_SCENES = [
     "world1_baseline",
     "world2_dense_clutter",

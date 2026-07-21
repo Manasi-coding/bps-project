@@ -1,0 +1,149 @@
+{
+  "scene": "world1_baseline",
+  "objects": [
+    {
+      "name": "obj_bottle",
+      "x": -0.3,
+      "y": -0.68,
+      "z": 0.87,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "width": 0.06,
+      "height": 0.2,
+      "depth": 0.06
+    },
+    {
+      "name": "obj_mug",
+      "x": -0.235,
+      "y": -0.68,
+      "z": 0.82,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "width": 0.07,
+      "height": 0.1,
+      "depth": 0.07
+    },
+    {
+      "name": "obj_bowl",
+      "x": 0.1,
+      "y": -0.68,
+      "z": 0.82,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "width": 0.1,
+      "height": 0.1,
+      "depth": 0.1
+    },
+    {
+      "name": "obj_apple",
+      "x": 0.185,
+      "y": -0.68,
+      "z": 0.805,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "width": 0.07,
+      "height": 0.07,
+      "depth": 0.07
+    },
+    {
+      "name": "obj_spoon",
+      "x": 0.33,
+      "y": -0.68,
+      "z": 0.775,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 1.2,
+      "width": 0.02,
+      "height": 0.01,
+      "depth": 0.13
+    },
+    {
+      "name": "obj_plate",
+      "x": -0.3,
+      "y": -0.45,
+      "z": 0.7775,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "width": 0.18,
+      "height": 0.015,
+      "depth": 0.18
+    },
+    {
+      "name": "obj_tissue_box",
+      "x": 0.0,
+      "y": -0.55,
+      "z": 0.82,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.15,
+      "width": 0.12,
+      "height": 0.1,
+      "depth": 0.09
+    },
+    {
+      "name": "obj_cereal_box",
+      "x": 0.3,
+      "y": -0.45,
+      "z": 0.89,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": -0.2,
+      "width": 0.07,
+      "height": 0.24,
+      "depth": 0.18
+    },
+    {
+      "name": "obj_notebook",
+      "x": -0.1,
+      "y": -0.3,
+      "z": 0.78,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.3,
+      "width": 0.15,
+      "height": 0.02,
+      "depth": 0.21
+    },
+    {
+      "name": "obj_remote",
+      "x": -0.08,
+      "y": -0.32,
+      "z": 0.8,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.3,
+      "width": 0.045,
+      "height": 0.02,
+      "depth": 0.16
+    },
+    {
+      "name": "obj_toy_block",
+      "x": 0.15,
+      "y": -0.3,
+      "z": 0.795,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.6,
+      "width": 0.05,
+      "height": 0.05,
+      "depth": 0.05
+    },
+    {
+      "name": "obj_banana",
+      "x": 0.3,
+      "y": -0.3,
+      "z": 0.79,
+      "roll": 1.5708,
+      "pitch": 0.0,
+      "yaw": 0.4,
+      "width": 0.04,
+      "height": 0.18,
+      "depth": 0.04
+    }
+  ]
+}

@@ -6,8 +6,9 @@ world_aabb: cylinder 'obj_pencil' has nonzero roll/pitch — using conservative 
 world_aabb: cylinder 'obj_chopstick_a' has nonzero roll/pitch — using conservative bounding-sphere AABB, not an exact fit.
 world_aabb: cylinder 'obj_chopstick_b' has nonzero roll/pitch — using conservative bounding-sphere AABB, not an exact fit.
 world_aabb: cylinder 'obj_straw' has nonzero roll/pitch — using conservative bounding-sphere AABB, not an exact fit.
+world3_thin_objects__v2: 1 object(s) have no mask.
+world3_thin_objects__v3: 1 object(s) have no mask.
+world3_thin_objects__v4: 1 object(s) have no mask.
+world3_thin_objects__v5: 1 object(s) have no mask.
+world3_thin_objects__v6: 1 object(s) have no mask.
 minimum_boundary_distance: no depth available for this row — PIXEL units, not metres.
-world5_occlusion_scene: 'obj_jar' appears partially occluded (visible_fraction=0.35, visible_px=718, expected_px=2057) -- sanity check relaxed for this object rather than treated as a transform error; diff=0.083m.
-world5_occlusion_scene: 'obj_toy' appears partially occluded (visible_fraction=0.58, visible_px=653, expected_px=1127) -- sanity check relaxed for this object rather than treated as a transform error; diff=0.051m.
-world6_dense_mixed: 'obj_apple' appears partially occluded (visible_fraction=0.49, visible_px=809, expected_px=1654) -- sanity check relaxed for this object rather than treated as a transform error; diff=0.062m.
-world6_dense_mixed: 'obj_knife' appears partially occluded (visible_fraction=0.10, visible_px=243, expected_px=2496) -- sanity check relaxed for this object rather than treated as a transform error; diff=0.085m.

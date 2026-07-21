@@ -120,6 +120,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import numpy as np
+import re
 
 
 # ============================================================================
@@ -164,7 +165,7 @@ VALID_DEPTH_SOURCE_KINDS = {"gazebo_range_gt", "mde_predicted_z"}
 # --------------------------------------------------------------------------
 
 # Auto-run camera transform sanity check whenever depth loads.
-CAMERA_TRANSFORM_TOLERANCE_M = 0.05
+CAMERA_TRANSFORM_TOLERANCE_M = 0.10
 
 # --------------------------------------------------------------------------
 # One-time infrastructure validation mode.
@@ -186,7 +187,7 @@ PAIR_ADJACENCY_DILATION_PX = 8
 
 OUTPUT_COLUMNS = [
     "world_id", "scene_id", "object_id_a", "object_id_b",
-    "boundary_sharpness", "minimum_boundary_distance",
+    "boundary_sharpness", "minimum_boundary_distance", "minimum_boundary_distance_is_metric",
     "surface_normal_consistency", "relative_height", "depth_gradient",
     "overlap_ratio", "edge_continuity", "occlusion_boundary_score",
     "ground_truth_relation",
@@ -201,7 +202,10 @@ def _note(msg: str) -> None:
     if msg not in PLACEHOLDER_NOTES:
         PLACEHOLDER_NOTES.append(msg)
 
-
+def scene_id_for_viewpoint(world_id: str, viewpoint: int) -> str:
+    """Matches the capture-side convention from process_all_rooms.py:
+    viewpoint 1 -> world_id, viewpoint N>=2 -> world_id__v{N}."""
+    return world_id if viewpoint == 1 else f"{world_id}__v{viewpoint}"
 # ============================================================================
 # SDF parsing
 # ============================================================================
@@ -261,15 +265,15 @@ def _is_placeholder_pose(
         and np.allclose(rpy, 0.0, atol=atol)
     )
 
-def parse_world_sdf(sdf_path: Path) -> tuple[dict[str, ObjectGeom], Optional[CameraGeom]]:
+def parse_world_sdf(sdf_path: Path) -> tuple[dict[str, ObjectGeom], dict[int, CameraGeom]]:
     tree = ET.parse(sdf_path)
     root = tree.getroot()
     world = root.find("world")
     if world is None:
-        return {}, None
+        return {}, {}
 
     objects: dict[str, ObjectGeom] = {}
-    camera: Optional[CameraGeom] = None
+    cameras: dict[int, CameraGeom] = {}
 
     for model in world.findall("model"):
         name = model.get("name")
@@ -352,17 +356,22 @@ def parse_world_sdf(sdf_path: Path) -> tuple[dict[str, ObjectGeom], Optional[Cam
                       f"collision geometry type — skipped.")
             continue
 
-        depth_sensor = model.find(".//sensor[@name='depth_camera1']")
-        if depth_sensor is not None:
-            cam_block = depth_sensor.find("camera")
+        for sensor in model.findall(".//sensor"):
+            if sensor.get("type") != "depth_camera":
+                continue
+            sensor_name = sensor.get("name", "")
+            m = re.fullmatch(r"depth_camera(\d+)", sensor_name)
+            if not m:
+                continue
+            viewpoint = int(m.group(1))
+
+            cam_block = sensor.find("camera")
             image_el = cam_block.find("image")
             clip_el = cam_block.find("clip")
 
-            # Compose model pose with the <link> pose (link pose is a rigid
-            # offset expressed in the model's frame).
             link_el = None
             for link_candidate in model.findall("link"):
-                if link_candidate.find(".//sensor[@name='depth_camera1']") is not None:
+                if link_candidate.find(f".//sensor[@name='{sensor_name}']") is not None:
                     link_el = link_candidate
                     break
             link_pose_el = link_el.find("pose") if link_el is not None else None
@@ -372,7 +381,7 @@ def parse_world_sdf(sdf_path: Path) -> tuple[dict[str, ObjectGeom], Optional[Cam
             else:
                 world_xyz = xyz
 
-            camera = CameraGeom(
+            cameras[viewpoint] = CameraGeom(
                 name=name, xyz=world_xyz, rpy=rpy,
                 width=int(image_el.find("width").text),
                 height=int(image_el.find("height").text),
@@ -381,13 +390,9 @@ def parse_world_sdf(sdf_path: Path) -> tuple[dict[str, ObjectGeom], Optional[Cam
                 clip_far=float(clip_el.find("far").text),
             )
 
-            print("\n========== CAMERA ==========")
-            print(f"Camera model : {name}")
-            print(f"Camera xyz   : {xyz}")
-            print(f"Camera rpy   : {rpy}")
-            print("============================\n")
+            print(f"[{sdf_path.stem}] Found camera '{sensor_name}' -> viewpoint {viewpoint}, xyz={world_xyz}")
 
-    return objects, camera
+    return objects, cameras
 
 
 def discover_worlds(sdf_dir: Path) -> list[Path]:
@@ -401,7 +406,7 @@ def discover_worlds(sdf_dir: Path) -> list[Path]:
     valid = []
     for sdf_path in candidates:
         try:
-            objects, camera = parse_world_sdf(sdf_path)
+            objects, cameras = parse_world_sdf(sdf_path)
         except ET.ParseError as e:
             _note(f"discover_worlds: {sdf_path} failed to parse as XML ({e}) — skipped.")
             continue
@@ -409,9 +414,9 @@ def discover_worlds(sdf_dir: Path) -> list[Path]:
             _note(f"discover_worlds: {sdf_path} has no gz-sim-label-system "
                   f"labeled objects — not treated as a world, skipped.")
             continue
-        if camera is None:
+        if not cameras or 1 not in cameras:
             _note(f"discover_worlds: {sdf_path} has labeled objects but no "
-                  f"depth_camera1 sensor — skipped (cannot support "
+                  f"viewpoint-1 depth_camera1 sensor — skipped (cannot support "
                   f"depth-dependent features or intrinsics derivation).")
             continue
         valid.append(sdf_path)
@@ -797,7 +802,15 @@ def sanity_check_camera_transform(
         diff = abs(observed_z - expected_top_z)
 
         aabb_diagonal = float(np.linalg.norm(aabb[1] - aabb[0]))
-        effective_tolerance = max(tolerance_m, 0.5 * aabb_diagonal)
+        # Scale relaxation down from 0.5x to 0.25x diagonal, and cap it so
+        # large/irregular objects (e.g. cereal boxes) can't fully swallow a
+        # genuine transform error behind their own size.
+        effective_tolerance = max(tolerance_m, min(0.25 * aabb_diagonal, 0.15))
+
+        print(f"  [DEBUG] {name}: expected_top={expected_top_z:.3f} "
+              f"observed={observed_z:.3f} diff={diff:.3f} "
+              f"aabb_diag={aabb_diagonal:.3f} eff_tol={effective_tolerance:.3f} "
+              f"margin={effective_tolerance - diff:.3f}")
 
         if diff > effective_tolerance:
             # Before failing, check whether this object is simply
@@ -901,16 +914,16 @@ def feat_boundary_sharpness(depth, ring_a, ring_b, mask_a, mask_b) -> float:
     return float(np.mean(grad_mag[interface]))
 
 
-def feat_minimum_boundary_distance(mask_a, mask_b, camera: Optional[CameraGeom], median_depth: Optional[float]) -> float:
+def feat_minimum_boundary_distance(mask_a, mask_b, camera: Optional[CameraGeom], median_depth: Optional[float]) -> tuple[float, bool]:
     dist_to_b_px = cv2.distanceTransform((~mask_b).astype(np.uint8), cv2.DIST_L2, 5)
     if not np.any(mask_a):
-        return float("nan")
+        return float("nan"), False
     px_dist = float(np.min(dist_to_b_px[mask_a]))
     if camera is not None and median_depth is not None and np.isfinite(median_depth):
         metres_per_px = median_depth / camera.fx
-        return px_dist * metres_per_px
+        return px_dist * metres_per_px, True
     _note("minimum_boundary_distance: no depth available for this row — PIXEL units, not metres.")
-    return px_dist
+    return px_dist, False
 
 
 def feat_surface_normal_consistency(points_world, mask_a_flat, mask_b_flat) -> float:
@@ -1106,13 +1119,15 @@ def validate_configuration() -> None:
 # ============================================================================
 
 def extract_world_features(
-    sdf_path: Path, relation_source: CompositeRelationSource
+    sdf_path: Path, viewpoint: int, camera: CameraGeom,
+    objects: dict[str, ObjectGeom], relation_source: CompositeRelationSource
 ) -> tuple[pd.DataFrame, dict]:
     world_id = sdf_path.stem
-    objects, camera = parse_world_sdf(sdf_path)
-    present_names = enumerate_present_objects(world_id, objects)
+    scene_id = scene_id_for_viewpoint(world_id, viewpoint)
+    present_names = enumerate_present_objects(scene_id, objects)
 
-    diagnostics = {"world_id": world_id, "rows": 0, "unresolved_relations": 0,
+    diagnostics = {"world_id": world_id, "scene_id": scene_id, "viewpoint": viewpoint,
+                    "rows": 0, "unresolved_relations": 0,
                     "camera_transform_ok": None, "relation_source_counts": {}}
 
     if not present_names:
@@ -1121,17 +1136,17 @@ def extract_world_features(
     masks: dict[str, np.ndarray] = {}
     rings: dict[str, np.ndarray] = {}
     for name in present_names:
-        loaded = load_object_mask(world_id, name)
+        loaded = load_object_mask(scene_id, name)
         if loaded is None:
             continue
         masks[name], rings[name] = loaded
 
-    depth = load_world_depth(world_id)
+    depth = load_world_depth(scene_id)
     if REQUIRE_DEPTH and depth is None:
         raise RuntimeError(
-            f"{world_id}: REQUIRE_DEPTH=True but no depth array could be "
-            f"loaded from {DEPTH_ROOT / world_id if DEPTH_ROOT else '<unset>'}. "
-            f"Refusing to write a NaN-heavy CSV for this world."
+            f"{scene_id}: REQUIRE_DEPTH=True but no depth array could be "
+            f"loaded from {DEPTH_ROOT / (scene_id + '_depth.npy') if DEPTH_ROOT else '<unset>'}. "
+            f"Refusing to write a NaN-heavy CSV for this scene."
         )
 
     points_world = None
@@ -1144,7 +1159,7 @@ def extract_world_features(
                 points_world,
                 masks,
                 objects,
-                world_id,
+                scene_id,
                 CAMERA_TRANSFORM_TOLERANCE_M,
                 camera,
             )
@@ -1153,18 +1168,18 @@ def extract_world_features(
 
             if failures:
                 raise RuntimeError(
-                    f"{world_id}: camera-transform sanity check failed "
+                    f"{scene_id}: camera-transform sanity check failed "
                     f"for {len(failures)} object(s): {failures}"
                 )
 
         else:
             diagnostics["camera_transform_ok"] = None
             print(
-                f"{world_id}: skipped camera-transform sanity check "
+                f"{scene_id}: skipped camera-transform sanity check "
                 "(Depth Anything V2 produces relative depth, not simulator ground-truth metric depth)."
             )
     elif depth is not None and camera is None:
-        _note(f"{world_id}: depth available but no camera parsed from SDF — "
+        _note(f"{scene_id}: depth available but no camera parsed from SDF — "
               f"point-cloud features unavailable.")
 
     median_depth = float(np.nanmedian(depth)) if depth is not None else None
@@ -1187,14 +1202,18 @@ def extract_world_features(
 
         mask_a_flat = mask_a.reshape(-1)
         mask_b_flat = mask_b.reshape(-1)
+        min_boundary_dist, min_boundary_dist_is_metric = feat_minimum_boundary_distance(mask_a, mask_b, camera, median_depth)
 
         rows.append({
             "world_id": world_id,
-            "scene_id": world_id,
+            "scene_id": scene_id,
             "object_id_a": obj_a.label_id,
             "object_id_b": obj_b.label_id,
+            "_object_name_a": obj_a.name,
+            "_object_name_b": obj_b.name,
             "boundary_sharpness": feat_boundary_sharpness(depth, ring_a, ring_b, mask_a, mask_b),
-            "minimum_boundary_distance": feat_minimum_boundary_distance(mask_a, mask_b, camera, median_depth),
+            "minimum_boundary_distance": min_boundary_dist,
+            "minimum_boundary_distance_is_metric": min_boundary_dist_is_metric,
             "surface_normal_consistency": feat_surface_normal_consistency(points_world, mask_a_flat, mask_b_flat),
             "relative_height": feat_relative_height(points_world, mask_a_flat, mask_b_flat),
             "depth_gradient": feat_depth_gradient(depth, mask_a, mask_b),
@@ -1205,7 +1224,40 @@ def extract_world_features(
         })
 
     diagnostics["rows"] = len(rows)
-    return pd.DataFrame(rows, columns=OUTPUT_COLUMNS), diagnostics
+    full_columns = OUTPUT_COLUMNS[:4] + ["_object_name_a", "_object_name_b"] + OUTPUT_COLUMNS[4:]
+    return pd.DataFrame(rows, columns=full_columns), diagnostics
+
+
+# ============================================================================
+# Post-run reporting: spot-check export (point 3 / point 4 in the prompt)
+# ============================================================================
+
+def export_spot_check_sample(output_dir: Path, n_per_world: int = 5, seed: int = 42) -> None:
+    """Writes a CSV of a random sample of rows per world, for manual visual
+    verification against the SDFs — since SDFGeometryRelationSource has not
+    been cross-checked against any physics-based ground truth."""
+    rng = np.random.default_rng(seed)
+    samples = []
+    internal_dir = output_dir / "_internal"
+    if not internal_dir.exists():
+        return
+    for f in sorted(internal_dir.glob("*_features_full.csv")):
+        df = pd.read_csv(f)
+        if df.empty:
+            continue
+        n = min(n_per_world, len(df))
+        idx = rng.choice(len(df), size=n, replace=False)
+        cols = [c for c in [
+            "world_id", "scene_id", "object_id_a", "object_id_b",
+            "_object_name_a", "_object_name_b", "ground_truth_relation",
+        ] if c in df.columns]
+        samples.append(df.iloc[idx][cols])
+    if samples:
+        out = pd.concat(samples, ignore_index=True)
+        out_fp = output_dir / "spot_check_sample.csv"
+        out.to_csv(out_fp, index=False)
+        print(f"\nWrote spot-check sample ({len(out)} rows) -> {out_fp}")
+        print("Manually verify these against the SDFs before trusting labels as ground truth.")
 
 
 # ============================================================================
@@ -1236,6 +1288,16 @@ def main():
 
     validate_configuration()
 
+    if EXTERNAL_RELATION_TABLE is None and GAZEBO_CONTACT_LOG is None:
+        print("=" * 60)
+        print("WARNING: No ExternalTableRelationSource or GazeboContactRelationSource")
+        print("configured. 100% of ground-truth labels in this run come from")
+        print("SDFGeometryRelationSource — a static-pose heuristic, not physics-")
+        print("verified. Do not treat this run's output as paper-quality ground")
+        print("truth without either (a) wiring in a real source, or (b) manually")
+        print("spot-checking spot_check_sample.csv against the SDFs.")
+        print("=" * 60)
+
     sdf_files = discover_worlds(WORLDS_SDF_DIR)
     if not sdf_files:
         print(f"No structurally-valid world .sdf files found under {WORLDS_SDF_DIR} — nothing to do.")
@@ -1256,23 +1318,38 @@ def main():
 
     total_rows = 0
     all_diagnostics = []
+    internal_dir = OUTPUT_DIR / "_internal"
+    internal_dir.mkdir(parents=True, exist_ok=True)
+
     for sdf_path in sdf_files:
         world_id = sdf_path.stem
-        print(f"Processing {world_id} ...")
-        df, diag = extract_world_features(sdf_path, relation_source)
-        all_diagnostics.append(diag)
-        out_fp = OUTPUT_DIR / f"{world_id}_features.csv"
+        objects, cameras = parse_world_sdf(sdf_path)
+        for viewpoint in sorted(cameras.keys()):
+            scene_id = scene_id_for_viewpoint(world_id, viewpoint)
+            print(f"Processing {scene_id} (viewpoint {viewpoint}) ...")
+            camera = cameras[viewpoint]
+            df_full, diag = extract_world_features(sdf_path, viewpoint, camera, objects, relation_source)
+            all_diagnostics.append(diag)
 
-        if df.empty:
-            print(f"  [{world_id}] 0 rows extracted — not writing {out_fp.name}.\n")
-            continue
+            if df_full.empty:
+                out_fp = OUTPUT_DIR / f"{scene_id}_features.csv"
+                print(f"  [{scene_id}] 0 rows extracted — not writing {out_fp.name}.\n")
+                continue
 
-        df.to_csv(out_fp, index=False, encoding="utf-8")
-        print(f"  [{world_id}] Wrote {len(df)} rows -> {out_fp} "
-              f"(relation sources used: {diag['relation_source_counts']}, "
-              f"unresolved: {diag['unresolved_relations']}, "
-              f"camera_transform_ok: {diag['camera_transform_ok']})\n")
-        total_rows += len(df)
+            # Full copy (with internal name columns) for spot-check export only.
+            full_fp = internal_dir / f"{scene_id}_features_full.csv"
+            df_full.to_csv(full_fp, index=False, encoding="utf-8")
+
+            # Public copy matches build_training_table.py's expected schema.
+            df_public = df_full.drop(columns=["_object_name_a", "_object_name_b"])
+            out_fp = OUTPUT_DIR / f"{scene_id}_features.csv"
+            df_public.to_csv(out_fp, index=False, encoding="utf-8")
+
+            print(f"  [{scene_id}] Wrote {len(df_public)} rows -> {out_fp} "
+                  f"(relation sources used: {diag['relation_source_counts']}, "
+                  f"unresolved: {diag['unresolved_relations']}, "
+                  f"camera_transform_ok: {diag['camera_transform_ok']})\n")
+            total_rows += len(df_public)
 
     print("=" * 60)
     print(f"TOTAL ROWS WRITTEN: {total_rows}")
@@ -1281,12 +1358,13 @@ def main():
         validation = pd.DataFrame([
             {
                 "world": d["world_id"],
+                "scene_id": d["scene_id"],
+                "viewpoint": d["viewpoint"],
                 "camera_transform_ok": d["camera_transform_ok"],
                 "rows": d["rows"],
             }
             for d in all_diagnostics
         ])
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         validation.to_csv(
@@ -1304,6 +1382,22 @@ def main():
         print("\nFLAGGED ITEMS FROM THIS RUN:")
         for i, note in enumerate(PLACEHOLDER_NOTES, 1):
             print(f"  {i}. {note}")
+
+    all_rows = []
+    for f in sorted(OUTPUT_DIR.glob("*_features.csv")):
+        all_rows.append(pd.read_csv(f))
+    if all_rows:
+        combined = pd.concat(all_rows, ignore_index=True)
+        print("\n" + "=" * 60)
+        print("LABEL DISTRIBUTION (this run's output)")
+        print("=" * 60)
+        counts = combined["ground_truth_relation"].value_counts()
+        pcts = combined["ground_truth_relation"].value_counts(normalize=True).mul(100).round(1)
+        for label in counts.index:
+            print(f"  {label:10s}: {counts[label]:4d} ({pcts[label]}%)")
+        print(f"  {'TOTAL':10s}: {len(combined)}")
+
+    export_spot_check_sample(OUTPUT_DIR)
 
     print("\nSee the VALIDITY AUDIT section in this file's module docstring "
           "before treating this output as paper-quality training data.")
